@@ -1,0 +1,343 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IoC之加载BeanDefinition | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1583110607046">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="IoC之加载BeanDefinition | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="ClassPathResource resource = new ClassPathResource(&quot;bean.xml&quot;); // &lt;1&gt;
+DefaultListableBeanFactory factor..." />
+    <meta name="keywords" content="Spring" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1583110607046" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              IoC之加载BeanDefinition
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-03-01
+              </span>
+              <span>
+                6 min read
+              </span>
+              
+                <a href="https://guyang233.github.io/tag/5KFZhgCVhM" class="post-tag">
+                  # Spring
+                </a>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <pre><code>ClassPathResource resource = new ClassPathResource(&quot;bean.xml&quot;); // &lt;1&gt;
+DefaultListableBeanFactory factory = new DefaultListableBeanFactory(); // &lt;2&gt;
+XmlBeanDefinitionReader reader = new XmlBeanDefinitionReader(factory); // &lt;3&gt;
+reader.loadBeanDefinitions(resource); // &lt;4&gt;
+</code></pre>
+<ul>
+<li>这段代码是Spring编程式中使用IoC容器，可以判断IoC容器的使用过程
+<ul>
+<li>获取资源</li>
+<li>创建BeanFactory</li>
+<li>根据新创建的BeanFactory创建一个BeanDefinitionReader对象，该reader对象为资源解析器</li>
+<li>装载资源</li>
+</ul>
+</li>
+<li>整个过程分为三个步骤，资源定位、装载、注册
+<ul>
+<li>资源定位：我们一般用外部资源来描述Bean对象，所以在初始化IoC容器的第一步就是要定位外部资源。</li>
+<li>装载：装载就是BeanDefinition的载入，BeanDefinitionReader读取、解析Resource资源，也就是将用户定义的Bean表示成为IoC容器的内部数据结构，BeanDefinition</li>
+<li>在IoC容器内部中维护着一个BeanDefinitionMap的数据结构</li>
+<li>在配置文件中每一个<bean>都对应着一个BeanDefinition对象。BeanDefinitionReader，主要定义资源文件读取并转换为BeanDefinition的各个功能</li>
+<li>注册：向IoC容器注册在第二步解析好的BeanDefinition，这个过程是通过BeanDefinitionRegistry接口实现的，在IoC容器内部其实就是将第二过程解析得到的BeanDefinition注入到一个 HashMap容器中，IoC容器就是通过这个HashMap来维护这些BeanDefinition的</li>
+<li><img src="https://guyang233.github.io/post-images/1583108382024.png" alt="" loading="lazy">
+<ul>
+<li>在这里需要注意的一点是这个过程中并没有完成依赖注入（Bean创建），Bean创建是发生在应用的第一次调用#getBean方法，想容器索要Bean时</li>
+<li>当然我们饿可以通过设置预处理，即对某个Bean设置lazyinit = false属性，那么这个Bean的依赖注入就会在容器初始化的时候完成</li>
+<li>简单的说，其实上面的步骤的结果就是：XML Resource =&gt; XML Document =&gt; XML BeanDefinition</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="1-loadbeandefinitions">1、loadBeanDefinitions</h4>
+<ul>
+<li>资源定位之前说过，直接分析加载，<code>reader.loadBeanDefinitions(resource);</code>这句代码才是加载资源的真正实现，所以直接从该方法下手。</li>
+</ul>
+<pre><code>@Override
+public int loadBeanDefinitions(Resource resource) throws BeanDefinitionStoreException {
+		return loadBeanDefinitions(new EncodedResource(resource));
+	}
+</code></pre>
+<ul>
+<li>从指定的XML文件中加载Bean Definition，这里先会对reource 资源封装成EncodedResource对象，为什么需要封装成为EncodedResource呢，主要是为了对Resource进行编码，保证内容读取的正确性。</li>
+<li>然后又调用#loadBeanDefinitions方法来实现真正的逻辑</li>
+</ul>
+<pre><code>public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
+		Assert.notNull(encodedResource, &quot;EncodedResource must not be null&quot;);
+		if (logger.isTraceEnabled()) {
+			logger.trace(&quot;Loading XML bean definitions from &quot; + encodedResource);
+		}
+		//1、获取已经加载过得资源
+		Set&lt;EncodedResource&gt; currentResources = this.resourcesCurrentlyBeingLoaded.get();
+		if (currentResources == null) {
+			currentResources = new HashSet&lt;&gt;(4);
+			this.resourcesCurrentlyBeingLoaded.set(currentResources);
+		}
+		//将当前资源添加进去，如果资源已经存在，抛出异常
+		if (!currentResources.add(encodedResource)) {
+			throw new BeanDefinitionStoreException(
+					&quot;Detected cyclic loading of &quot; + encodedResource + &quot; - check your import definitions!&quot;);
+		}
+		try {
+			//2、从 EncodedResource 获取封装的 Resource ，并从 Resource 中获取其中的 InputStream
+			InputStream inputStream = encodedResource.getResource().getInputStream();
+			try {
+				InputSource inputSource = new InputSource(inputStream);
+				if (encodedResource.getEncoding() != null) {
+					inputSource.setEncoding(encodedResource.getEncoding());
+				}
+				//执行加载
+				return doLoadBeanDefinitions(inputSource, encodedResource.getResource());
+			}
+			finally {
+				inputStream.close();
+			}
+		}
+		catch (IOException ex) {
+			throw new BeanDefinitionStoreException(
+					&quot;IOException parsing XML document from &quot; + encodedResource.getResource(), ex);
+		}
+		finally {
+			//3、从缓存中剔除资源
+			currentResources.remove(encodedResource);
+			if (currentResources.isEmpty()) {
+				this.resourcesCurrentlyBeingLoaded.remove();
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>1、 通过resourcesCurrentlyBeingLoaded.get()来获取已经加载过的资源，然后将encodedResource加入其中，如果已经存在该资源，抛出异常
+<ul>
+<li>为什么要这样做呢？Detected cyclic loading ，避免一个encodedResource在加载中，没有加载完成的时候又加载自身，从而导致死循环。</li>
+<li>因此在3的步骤时，资源加载完成后，要从缓存中剔除资源</li>
+</ul>
+</li>
+<li>2、 从EncodedResource获取封装的Resource资源，并从Resource中获取相应的InputStream，然后将InputStream封装为InputSource，最后调用#doLoadBeanDefinitions，执行整整的Bean Definition加载逻辑。</li>
+</ul>
+<pre><code>protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
+			throws BeanDefinitionStoreException {
+
+		try {
+            //获取XML DOCUMENT实例
+			Document doc = doLoadDocument(inputSource, resource);
+            //根据Document实例注册Bean信息
+			int count = registerBeanDefinitions(doc, resource);
+			if (logger.isDebugEnabled()) {
+				logger.debug(&quot;Loaded &quot; + count + &quot; bean definitions from &quot; + resource);
+			}
+			return count;
+		}
+		catch (BeanDefinitionStoreException ex) {
+			throw ex;
+		}
+		catch (SAXParseException ex) {
+			throw new XmlBeanDefinitionStoreException(resource.getDescription(),
+					&quot;Line &quot; + ex.getLineNumber() + &quot; in XML document from &quot; + resource + &quot; is invalid&quot;, ex);
+		}
+		catch (SAXException ex) {
+			throw new XmlBeanDefinitionStoreException(resource.getDescription(),
+					&quot;XML document from &quot; + resource + &quot; is invalid&quot;, ex);
+		}
+		catch (ParserConfigurationException ex) {
+			throw new BeanDefinitionStoreException(resource.getDescription(),
+					&quot;Parser configuration exception parsing XML from &quot; + resource, ex);
+		}
+		catch (IOException ex) {
+			throw new BeanDefinitionStoreException(resource.getDescription(),
+					&quot;IOException parsing XML document from &quot; + resource, ex);
+		}
+		catch (Throwable ex) {
+			throw new BeanDefinitionStoreException(resource.getDescription(),
+					&quot;Unexpected exception parsing XML document from &quot; + resource, ex);
+		}
+	}
+</code></pre>
+<ul>
+<li>在1处，调用doLoadDocument方法， 根据XML文件获取Document实例</li>
+<li>在2处，调用registerBeanDefinitions方法，根据Document来注册Bean Definition</li>
+</ul>
+<pre><code>/**
+ * 获取 XML Document 实例
+ *
+ * Actually load the specified document using the configured DocumentLoader.
+ * @param inputSource the SAX InputSource to read from
+ * @param resource the resource descriptor for the XML file
+ * @return the DOM Document
+ * @throws Exception when thrown from the DocumentLoader
+ * @see #setDocumentLoader
+ * @see DocumentLoader#loadDocument
+ */
+protected Document doLoadDocument(InputSource inputSource, Resource resource) throws Exception {
+	return this.documentLoader.loadDocument(inputSource, getEntityResolver(), this.errorHandler,
+			getValidationModeForResource(resource), isNamespaceAware());
+}
+</code></pre>
+<ul>
+<li>1、调用 #getValidationModeForResource(Resource resource) 方法，获取指定资源（xml）的验证模式</li>
+<li>2、调用 DocumentLoader#loadDocument(InputSource inputSource, EntityResolver entityResolver, ErrorHandler errorHandler, int validationMode, boolean namespaceAware) 方法，获取 XML Document 实例</li>
+</ul>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1-loadbeandefinitions">1、loadBeanDefinitions</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/er-cha-shu-bian-li">
+              <h3 class="post-title">
+                二叉树遍历
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

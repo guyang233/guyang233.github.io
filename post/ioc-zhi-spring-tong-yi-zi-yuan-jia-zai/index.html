@@ -1,0 +1,853 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IoC之Spring统一资源加载 | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1583110607046">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="IoC之Spring统一资源加载 | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="1、统一资源：Resource
+
+为Spring框架资源的抽象和访问接口，继承InputStreamSource接口，作为资源的统一抽象，Resource定义了一些通用的方法，由子类AbstractResource提供统一的默认实现。
+
+ ..." />
+    <meta name="keywords" content="Spring" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1583110607046" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              IoC之Spring统一资源加载
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-01-13
+              </span>
+              <span>
+                16 min read
+              </span>
+              
+                <a href="https://guyang233.github.io/tag/5KFZhgCVhM" class="post-tag">
+                  # Spring
+                </a>
+              
+            </div>
+            
+              <img class="post-feature-image" src="https://guyang233.github.io/post-images/ioc-zhi-spring-tong-yi-zi-yuan-jia-zai.png" alt="">
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <h3 id="1-统一资源resource">1、统一资源：Resource</h3>
+<ul>
+<li>为Spring框架资源的抽象和访问接口，继承InputStreamSource接口，作为资源的统一抽象，Resource定义了一些通用的方法，由子类AbstractResource提供统一的默认实现。</li>
+</ul>
+<pre><code>  public interface Resource extends InputStreamSource {
+
+	/**
+	 * 资源是否存在
+	 */
+	boolean exists();
+
+	/**
+	 * 资源是否可读
+	 */
+	default boolean isReadable() {
+		return true;
+	}
+
+	/**
+	 * 资源所代表的句柄是否被一个 stream 打开了
+	 */
+	default boolean isOpen() {
+		return false;
+	}
+
+	/**
+	 * 是否为 File
+	 */
+	default boolean isFile() {
+		return false;
+	}
+
+	/**
+	 * 返回资源的 URL 的句柄
+	 */
+	URL getURL() throws IOException;
+
+	/**
+	 * 返回资源的 URI 的句柄
+	 */
+	URI getURI() throws IOException;
+
+	/**
+	 * 返回资源的 File 的句柄
+	 */
+	File getFile() throws IOException;
+
+	/**
+	 * 返回 ReadableByteChannel
+	 */
+	default ReadableByteChannel readableChannel() throws IOException {
+		return java.nio.channels.Channels.newChannel(getInputStream());
+	}
+
+	/**
+	 * 资源内容的长度
+	 */
+	long contentLength() throws IOException;
+
+	/**
+	 * 资源最后的修改时间
+	 */
+	long lastModified() throws IOException;
+
+	/**
+	 * 根据资源的相对路径创建新资源
+	 */
+	Resource createRelative(String relativePath) throws IOException;
+
+	/**
+	 * 资源的文件名
+	 */
+	@Nullable
+	String getFilename();
+
+	/**
+	 * 资源的描述
+	 */
+	String getDescription();
+  }
+</code></pre>
+<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578884649610.png" alt="" loading="lazy"></figure>
+<ul>
+<li>FileSystemResource:对java.io.File类型的资源封装。只要是跟File打交道的，基本上与FileSystemResource也可以打交道。支持文件和URL形式，实现WritableResource接口。从Spring5.0开始，FileSystemResource使用NIO2 API进行读/写交互</li>
+<li>ByteArrayResource ：对字节数组提供的数据的封装，通过InputStream形式访问该类型的资源，该实现会根据字节数组的数据构造一个相应的ByteArrayInputStream</li>
+<li>UrlResource ：对java.net.URL类型资源的封装，内部委派URl进行具体的资源操作</li>
+<li>ClassPathResource：class path类型资源的封装，使用给定的ClassLoader或者给定的Class来加载资源</li>
+<li>InputStreamResource：将给定的InputStream作为一种资源的Resource实现类。</li>
+</ul>
+<h4 id="12-abstractresource">1.2 AbstractResource</h4>
+<ul>
+<li>Resource接口的默认抽象实现，实现了Resource接口的大部分的公共实现。Resource接口中的重中之重，定义如下：</li>
+</ul>
+<pre><code>public abstract class AbstractResource implements Resource {
+
+	/**
+	 * 判断文件是否存在，若判断过程产生异常（因为会调用SecurityManager来判断），就关闭对应的流
+	 */
+	@Override
+	public boolean exists() {
+		try {
+		  // 基于 File 进行判断
+			return getFile().exists();
+		}
+		catch (IOException ex) {
+			// Fall back to stream existence: can we open the stream?
+			// 基于 InputStream 进行判断
+			try {
+				InputStream is = getInputStream();
+				is.close();
+				return true;
+			} catch (Throwable isEx) {
+				return false;
+			}
+		}
+	}
+
+	/**
+	 * 直接返回true，表示可读
+	 */
+	@Override
+	public boolean isReadable() {
+		return true;
+	}
+
+	/**
+	 * 直接返回 false，表示未被打开
+	 */
+	@Override
+	public boolean isOpen() {
+		return false;
+	}
+
+	/**
+	 * 直接返回false，表示不为 File
+	 */
+	@Override
+	public boolean isFile() {
+		return false;
+	}
+
+	/**
+	 * 抛出 FileNotFoundException 异常，交给子类实现
+	 */
+	@Override
+	public URL getURL() throws IOException {
+		throw new FileNotFoundException(getDescription() + &quot; cannot be resolved to URL&quot;);
+
+	}
+
+	/**
+	 * 基于 getURL() 返回的 URL 构建 URI
+	 */
+	@Override
+	public URI getURI() throws IOException {
+		URL url = getURL();
+		try {
+			return ResourceUtils.toURI(url);
+		} catch (URISyntaxException ex) {
+			throw new NestedIOException(&quot;Invalid URI [&quot; + url + &quot;]&quot;, ex);
+		}
+	}
+
+	/**
+	 * 抛出 FileNotFoundException 异常，交给子类实现
+	 */
+	@Override
+	public File getFile() throws IOException {
+		throw new FileNotFoundException(getDescription() + &quot; cannot be resolved to absolute file path&quot;);
+	}
+
+	/**
+	 * 根据 getInputStream() 的返回结果构建 ReadableByteChannel
+	 */
+	@Override
+	public ReadableByteChannel readableChannel() throws IOException {
+		return Channels.newChannel(getInputStream());
+	}
+
+	/**
+	 * 获取资源的长度
+	 *
+	 * 这个资源内容长度实际就是资源的字节长度，通过全部读取一遍来判断
+	 */
+	@Override
+	public long contentLength() throws IOException {
+		InputStream is = getInputStream();
+		try {
+			long size = 0;
+			byte[] buf = new byte[255]; // 每次最多读取 255 字节
+			int read;
+			while ((read = is.read(buf)) != -1) {
+				size += read;
+			}
+			return size;
+		} finally {
+			try {
+				is.close();
+			} catch (IOException ex) {
+			}
+		}
+	}
+
+	/**
+	 * 返回资源最后的修改时间
+	 */
+	@Override
+	public long lastModified() throws IOException {
+		long lastModified = getFileForLastModifiedCheck().lastModified();
+		if (lastModified == 0L) {
+			throw new FileNotFoundException(getDescription() +
+					&quot; cannot be resolved in the file system for resolving its last-modified timestamp&quot;);
+		}
+		return lastModified;
+	}
+
+	protected File getFileForLastModifiedCheck() throws IOException {
+		return getFile();
+	}
+
+	/**
+	 * 抛出 FileNotFoundException 异常，交给子类实现
+	 */
+	@Override
+	public Resource createRelative(String relativePath) throws IOException {
+		throw new FileNotFoundException(&quot;Cannot create a relative resource for &quot; + getDescription());
+	}
+
+	/**
+	 * 获取资源名称，默认返回 null ，交给子类实现
+	 */
+	@Override
+	@Nullable
+	public String getFilename() {
+		return null;
+	}
+
+	/**
+	 * 返回资源的描述
+	 */
+	@Override
+	public String toString() {
+		return getDescription();
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		return (obj == this ||
+			(obj instanceof Resource &amp;&amp; ((Resource) obj).getDescription().equals(getDescription())));
+	}
+
+	@Override
+	public int hashCode() {
+		return getDescription().hashCode();
+	}
+
+}
+</code></pre>
+<ul>
+<li>如果我们想实现自定义的Resource，不要实现Resource接口，而应该继承AbstractResource抽象类，根据当前的具体资源特性覆盖对应的方法即可</li>
+</ul>
+<h4 id="13-其他子类">1.3 其他子类</h4>
+<ul>
+<li>FileSystemResource</li>
+<li>ByteArrayResource</li>
+<li>UrlResource</li>
+<li>ClassPathResource</li>
+<li>InputStreamResource</li>
+</ul>
+<h3 id="2-统一资源定位resourceloader">2、统一资源定位：ResourceLoader</h3>
+<ul>
+<li>Spring将资源的定义和资源的加载区分开了，Resource定义了统一的资源，那么资源的加载则由ResourceLoader来统一定义。</li>
+<li>ResourceLoader为pring资源的统一加载抽象，具体的资源加载则由相应的实现类来完成，所以我们可以将ResourceLoader作为统一资源定位器。ResourceLoader，定义资源加载器，主要应用于根据给的资源文件地址，返回相应的Resource</li>
+</ul>
+<pre><code>public interface ResourceLoader {
+
+// CLASSPATH URL 前缀。默认为：&quot;classpath:&quot;
+	String CLASSPATH_URL_PREFIX = ResourceUtils.CLASSPATH_URL_PREFIX; 
+
+	Resource getResource(String location);
+
+	ClassLoader getClassLoader();
+
+}
+</code></pre>
+<ul>
+<li>#getResource(String location)方法
+<ul>
+<li>根据资源提供的位置离加载资源，不确保Resource一定存在，需要调用Resource.exist()来判断资源是否存在。支持一下方法来加载：
+<ul>
+<li>支持绝对路径：file:C:/test.dat&quot;.</li>
+<li>伪路径：&quot;classpath:test.dat&quot;.</li>
+<li>支持相对路径：&quot;WEB-INF/test.dat&quot;.</li>
+</ul>
+</li>
+<li>该方法主要是在其子类DefaultResourceLoader中实现。具体过程在分析DefaultResourceLoader时详细说明</li>
+</ul>
+</li>
+<li>#getClassLoader()方法
+<ul>
+<li>返回ClassLoader实例，对于想要获取ResourceLoader使用的ClassLoader用户来说，可以直接调用该方法来获取，在分析Resource是，提到了一个ClassPathResource，这个类是可以根据指定的CLassLoader来加载资源的</li>
+</ul>
+</li>
+</ul>
+<h4 id="21-子类结构">2.1、子类结构</h4>
+<ul>
+<li>作为Spring统一的资源加载器，提供了统一的抽象，具体IDE实现规则有相应的子类来负责实现，结构的类图<br>
+<img src="https://guyang233.github.io/post-images/1578971511318.png" alt="" loading="lazy"></li>
+</ul>
+<h5 id="211-defaultresourceloader">2.1.1 DefaultResourceLoader</h5>
+<ul>
+<li>与AbstractResource相似，是ResourceLoader的默认实现</li>
+<li>构造函数：接收ClassLoader作为构造函数的参数，或者使用不带参数的构造函数
+<ul>
+<li>在使用不带参数的构造函数的时候，使用额ClassLoader为默认的ClassLoader，一般都是Thread.currentThread().getContextClassLoader();</li>
+<li>使用带参数的构造函数时，可以通过 ClassUtils#getDefaultClassLoader()来获取。</li>
+</ul>
+</li>
+</ul>
+<pre><code>@Nullable
+private ClassLoader classLoader;
+// 无参构造函数
+public DefaultResourceLoader() { 
+	this.classLoader = ClassUtils.getDefaultClassLoader();
+}
+// 带 ClassLoader 参数的构造函数
+public DefaultResourceLoader(@Nullable ClassLoader classLoader) { 
+	this.classLoader = classLoader;
+}
+
+public void setClassLoader(@Nullable ClassLoader classLoader) {
+	this.classLoader = classLoader;
+}
+
+@Override
+@Nullable
+public ClassLoader getClassLoader() {
+	return (this.classLoader != null ? this.classLoader : ClassUtils.getDefaultClassLoader());
+}
+另外也可以调用#setClassLoader()方法进行后续设置
+</code></pre>
+<h5 id="212-getresource方法">2.1.2 getResource方法</h5>
+<ul>
+<li>ResourceLoader中最核心的方法为#getResource(String location)</li>
+</ul>
+<pre><code>	@Override
+	public Resource getResource(String location) {
+		Assert.notNull(location, &quot;Location must not be null&quot;);
+
+		//首先遍历protocolResolvers set集合，初始为空的
+		for (ProtocolResolver protocolResolver : this.protocolResolvers) {
+			Resource resource = protocolResolver.resolve(location, this);
+			if (resource != null) {
+				return resource;
+			}
+		}
+		//判断路径是否以“/”开头，是的话采用路径加载Resource
+		if (location.startsWith(&quot;/&quot;)) {
+			return getResourceByPath(location);
+		}
+		//是否是classpath路径，是的话加载classpath资源
+		else if (location.startsWith(CLASSPATH_URL_PREFIX)) {
+			return new ClassPathResource(location.substring(CLASSPATH_URL_PREFIX.length()), getClassLoader());
+		}
+		else {
+			//判断是否为文件URL， 是的话就返回FileUrlResource， 否则返回UrlResource
+			try {
+				// Try to parse the location as a URL...
+				URL url = new URL(location);
+				return (ResourceUtils.isFileURL(url) ? new FileUrlResource(url) : new UrlResource(url));
+			}
+			catch (MalformedURLException ex) {
+				//最后，返回 ClassPathContextResource 类型的资源
+				// No URL -&gt; resolve as resource path.
+				return getResourceByPath(location);
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>首先，通过ProtocolResolver来加载资源，成功返回Resource</li>
+<li>其次，若location以&quot;/&quot;开头，则调用#getResourceByPath()方法，构造ClassPathContextResource类型资源并返回</li>
+</ul>
+<pre><code>	protected Resource getResourceByPath(String path) {
+		return new ClassPathContextResource(path, getClassLoader());
+	}
+</code></pre>
+<ul>
+<li>再次，判断path是否以classpath:开头，是的话构造ClassPathResource类型资源返回在构造该资源时，通过#getClassLoader()获取当前的ClassLoader</li>
+<li>然后构造URL类型的资源，尝试通过它来对资源进行定位，如果没有抛出MalformedURLException异常的话，判断是是否为文件URL，如果是的话构造FileUrlResource，如果不是的话构造UrlResource类型的资源。</li>
+<li>最后，如果抛出MalformedURLException异常，就调用#getResourceByPath方法来加载资源。</li>
+</ul>
+<h5 id="212-protocolresolver">2.1.2 ProtocolResolver</h5>
+<ul>
+<li>ProtocolResolver，用户自定义协议资源解决策略，作为DefaultResourceLoader的SPI：允许用户自定义资源加载协议，而不需要继承ResourceLoader的子类</li>
+<li>在介绍Resource的时候提到如果实现自定义的Resource，我们只需要继承AbstractResource即可，但是有了ProtocolResolver后，我们不需要直接继承DefaultResourceLoader，改为实现ProtocolResolver接口也可以实现自定义的ResourceLoader</li>
+<li>ProtocolResolver只有一个方法</li>
+</ul>
+<pre><code>	/**
+	 * 使用指定的ResourceLoader来加载location的Resource
+	 * 
+	 * 
+	 * Resolve the given location against the given resource loader
+	 * if this implementation's protocol matches.
+	 * @param location the user-specified resource location
+	 * @param resourceLoader the associated resource loader
+	 * @return a corresponding {@code Resource} handle if the given location
+	 * matches this resolver's protocol, or {@code null} otherwise
+	 */
+	@Nullable
+	Resource resolve(String location, ResourceLoader resourceLoader);
+</code></pre>
+<ul>
+<li>在Spring没有该接口的实现类，需要用户自定义，自定义的Resolver想要加入Spring体系，调用DefaultResourceLoader.addProtocolResolver()方法就行</li>
+</ul>
+<pre><code>/**
+	 * Register the given resolver with this resource loader, allowing for
+	 * additional protocols to be handled.
+	 * &lt;p&gt;Any such resolver will be invoked ahead of this loader's standard
+	 * resolution rules. It may therefore also override any default rules.
+	 * @since 4.3
+	 * @see #getProtocolResolvers()
+	 */
+	public void addProtocolResolver(ProtocolResolver resolver) {
+		Assert.notNull(resolver, &quot;ProtocolResolver must not be null&quot;);
+		this.protocolResolvers.add(resolver);
+	}
+</code></pre>
+<h4 id="22-filesystemresourceloader">2.2 FileSystemResourceLoader</h4>
+<ul>
+<li>DefaultResourceLoader对于#getResourceByPath(String)处理的不是很恰当，这个时候我们可以使用FileSystemResourceLoader，他继承了DefaultResourceLoader，并且复写了getResourceByPath，使文件系统加载资源并以FileSystemContextResource类型返回，这样就得到了想要的资源类型：</li>
+</ul>
+<pre><code>	@Override
+	protected Resource getResourceByPath(String path) {
+		if (path.startsWith(&quot;/&quot;)) {
+			path = path.substring(1);
+		}
+		return new FileSystemContextResource(path);
+	}
+</code></pre>
+<h5 id="221-filesystemcontextresource">2.2.1 FileSystemContextResource</h5>
+<ul>
+<li>FileSystemContextResource, 是FileSystemResourceLoader的内部类，继承了FileSystemResource，实现ContextResource接口</li>
+</ul>
+<pre><code>	/**
+	 * FileSystemResource that explicitly expresses a context-relative path
+	 * through implementing the ContextResource interface.
+	 */
+	private static class FileSystemContextResource extends FileSystemResource implements ContextResource {
+
+		public FileSystemContextResource(String path) {
+			super(path);
+		}
+
+		@Override
+		public String getPathWithinContext() {
+			return getPath();
+		}
+	}
+</code></pre>
+<ul>
+<li>在构造器中，调用的是FileSystemResource的构造函数来构造FileSystemResource的</li>
+<li>为什么要有FileSystemContextResource类的原因是，实现ContextResource接口， 并实现对应的#getPathWithinContext()接口方法</li>
+</ul>
+<h4 id="23-classrelativeresourceloader">2.3 ClassRelativeResourceLoader</h4>
+<ul>
+<li>ClassRelativeResourceLoader，是DefaultResourceLoader的另一个子类的实现，和 FileSystemResourceLoader 类似，在实现代码的结构上类似，也是覆写 #getResourceByPath(String path) 方法，并返回其对应的 ClassRelativeContextResource 的资源类型。</li>
+<li>ClassRelativeResourceLoader 扩展的功能是，可以根据给定的 class 所在包或者所在包的子包下加载资源。</li>
+</ul>
+<h4 id="24-resourcepatternresolver">2.4 ResourcePatternResolver</h4>
+<ul>
+<li>ResourceLoader的#getResource方法，每次只能根据location来返回一个Resource，当需要加载多个资源的时候，我们除了多次调用#getResource方法外，没有别的办法。ResourcePatternResolver是ResourceLoader 的扩展，支持根据指定的资源路径匹配模式每次返回多个Resource实例。</li>
+</ul>
+<pre><code>public interface ResourcePatternResolver extends ResourceLoader {
+
+	/**
+	 * Pseudo URL prefix for all matching resources from the class path: &quot;classpath*:&quot;
+	 * This differs from ResourceLoader's classpath URL prefix in that it
+	 * retrieves all matching resources for a given name (e.g. &quot;/beans.xml&quot;),
+	 * for example in the root of all deployed JAR files.
+	 * @see org.springframework.core.io.ResourceLoader#CLASSPATH_URL_PREFIX
+	 */
+	String CLASSPATH_ALL_URL_PREFIX = &quot;classpath*:&quot;;
+
+	/**
+	 * Resolve the given location pattern into Resource objects.
+	 * &lt;p&gt;Overlapping resource entries that point to the same physical
+	 * resource should be avoided, as far as possible. The result should
+	 * have set semantics.
+	 * @param locationPattern the location pattern to resolve
+	 * @return the corresponding Resource objects
+	 * @throws IOException in case of I/O errors
+	 */
+	Resource[] getResources(String locationPattern) throws IOException;
+
+}
+</code></pre>
+<ul>
+<li>ResourcePatternResolver在ResourceLoader的基础上增加了#getResources方法，支持根绝路径匹配模式返回多个Resource实例</li>
+<li>同时，也新增了一种新的协议前缀， &quot;classpath*:&quot;，该协议前缀由其子类负责实现</li>
+</ul>
+<h4 id="25-pathmatchingresourcepatternresolver">2.5 PathMatchingResourcePatternResolver</h4>
+<ul>
+<li>PathMatchingResourcePatternResolver， 是ResourcePatternResovler最常用的子类，除了支持ResourceLoader和ResourcePatternResolver 新增的 &quot;classpath*:&quot; 前缀外，还支持 Ant 风格的路径匹配模式（类似于 &quot;**/*.xml&quot;）</li>
+</ul>
+<h5 id="251-构造函数">2.5.1 构造函数</h5>
+<pre><code>/**
+ * 内置的 ResourceLoader 资源定位器
+ */
+private final ResourceLoader resourceLoader;
+/**
+ * Ant 路径匹配器
+ */
+private PathMatcher pathMatcher = new AntPathMatcher();
+
+public PathMatchingResourcePatternResolver() {
+	this.resourceLoader = new DefaultResourceLoader();
+}
+
+public PathMatchingResourcePatternResolver(ResourceLoader resourceLoader) {
+	Assert.notNull(resourceLoader, &quot;ResourceLoader must not be null&quot;);
+	this.resourceLoader = resourceLoader;
+}
+
+public PathMatchingResourcePatternResolver(@Nullable ClassLoader classLoader) {
+	this.resourceLoader = new DefaultResourceLoader(classLoader);
+}
+</code></pre>
+<ul>
+<li>PathMatchingResourcePatternResolver在实例化的时候，可以指定一个ResourceLoader，如果没有指定的话，会在内部构造一个DefaultResourceLoader</li>
+<li>pathMatcher 属性，默认为 AntPathMatcher 对象，用于支持 Ant 类型的路径匹配。</li>
+</ul>
+<h5 id="252-getresource">2.5.2 getResource</h5>
+<pre><code>	@Override
+	public Resource getResource(String location) {
+		return getResourceLoader().getResource(location);
+	}
+
+    public ResourceLoader getResourceLoader() {
+		return this.resourceLoader;
+	}
+</code></pre>
+<ul>
+<li>这个方法直接委托给响应的ResourceLoader来实现，所以我们如果在实例化PathMatchingResourcePatternResolver的时候，如果未指定ResourceLoader参数的情况下，在加载资源的时候，电泳的是DefaultResourceLoader的#getResource的过程</li>
+</ul>
+<h5 id="253-getresources">2.5.3 getResources</h5>
+<pre><code>	@Override
+	public Resource[] getResources(String locationPattern) throws IOException {
+		Assert.notNull(locationPattern, &quot;Location pattern must not be null&quot;);
+		//以classpath*: 开头
+		if (locationPattern.startsWith(CLASSPATH_ALL_URL_PREFIX)) {
+			// a class path resource (multiple resources for same name possible)
+			//路径包含通配符
+			if (getPathMatcher().isPattern(locationPattern.substring(CLASSPATH_ALL_URL_PREFIX.length()))) {
+				// a class path resource pattern
+				return findPathMatchingResources(locationPattern);
+			}
+			//路径不包含通配符
+			else {
+				// all class path resources with the given name
+				return findAllClassPathResources(locationPattern.substring(CLASSPATH_ALL_URL_PREFIX.length()));
+			}
+		}
+		//不以classpath*: 开头
+		else {
+			// Generally only look for a pattern after a prefix here,
+			// and on Tomcat only after the &quot;*/&quot; separator for its &quot;war:&quot; protocol.
+			int prefixEnd = (locationPattern.startsWith(&quot;war:&quot;) ? locationPattern.indexOf(&quot;*/&quot;) + 1 :
+					locationPattern.indexOf(':') + 1);
+			//包含通配符
+			if (getPathMatcher().isPattern(locationPattern.substring(prefixEnd))) {
+				// a file pattern
+				return findPathMatchingResources(locationPattern);
+			}
+			//不包含通配符
+			else {
+				// a single resource with the given name
+				return new Resource[] {getResourceLoader().getResource(locationPattern)};
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>处理逻辑
+<ul>
+<li>非“classpath*:”开头，且不包含通配符的，直接委托给相应的ResourceLoader来实现</li>
+<li>其他情况，调用#findPathMatchingResources和#findAllClassPathResources来返回多个Resource</li>
+</ul>
+</li>
+</ul>
+<h5 id="254-findallclasspathresources">2.5.4 findAllClassPathResources</h5>
+<ul>
+<li>当locationPattern以“classpath*:”开头，但是不包含通配符，则调用#findAllClassPathResources方法加载资源，返回classes路径下和所有jar包中的所有相匹配的资源</li>
+</ul>
+<pre><code>protected Resource[] findAllClassPathResources(String location) throws IOException {
+	String path = location;
+	// 去除首个 /
+	if (path.startsWith(&quot;/&quot;)) {
+		path = path.substring(1);
+	}
+	// 真正执行加载所有 classpath 资源
+	Set&lt;Resource&gt; result = doFindAllClassPathResources(path);
+	if (logger.isTraceEnabled()) {
+		logger.trace(&quot;Resolved classpath location [&quot; + location + &quot;] to resources &quot; + result);
+	}
+	// 转换成 Resource 数组返回
+	return result.toArray(new Resource[0]);
+}
+</code></pre>
+<ul>
+<li>真正执行加载的是#doFindAllClassPathResources</li>
+</ul>
+<pre><code>protected Set&lt;Resource&gt; doFindAllClassPathResources(String path) throws IOException {
+		Set&lt;Resource&gt; result = new LinkedHashSet&lt;&gt;(16);
+		ClassLoader cl = getClassLoader();
+		//根据ClassLoader加载路径下的所有资源
+		Enumeration&lt;URL&gt; resourceUrls = (cl != null ? cl.getResources(path) : ClassLoader.getSystemResources(path));
+		while (resourceUrls.hasMoreElements()) {
+			URL url = resourceUrls.nextElement();
+			//将URL转为UrlResource
+			result.add(convertClassLoaderURL(url));
+		}
+		if (&quot;&quot;.equals(path)) {
+			// The above result is likely to be incomplete, i.e. only containing file system references.
+			// We need to have pointers to each of the jar files on the classpath as well...
+			//加载路径下面的所有Jar包
+			addAllClassLoaderJarRoots(cl, result);
+		}
+		return result;
+	}
+</code></pre>
+<ul>
+<li>根据ClassLoader加载路径下的所有资源，在加载资源的过程中，如果在构造PathMatchingResourcePatternResolver的时候传入了ClassLoader，那么调用ClassLoader的getResources方法，否则调用ClassLoader#getSystemResources</li>
+<li>ClassLoader#getResources方法：</li>
+</ul>
+<pre><code>
+</code></pre>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1-%E7%BB%9F%E4%B8%80%E8%B5%84%E6%BA%90resource">1、统一资源：Resource</a>
+<ul>
+<li><a href="#12-abstractresource">1.2 AbstractResource</a></li>
+<li><a href="#13-%E5%85%B6%E4%BB%96%E5%AD%90%E7%B1%BB">1.3 其他子类</a></li>
+</ul>
+</li>
+<li><a href="#2-%E7%BB%9F%E4%B8%80%E8%B5%84%E6%BA%90%E5%AE%9A%E4%BD%8Dresourceloader">2、统一资源定位：ResourceLoader</a>
+<ul>
+<li><a href="#21-%E5%AD%90%E7%B1%BB%E7%BB%93%E6%9E%84">2.1、子类结构</a>
+<ul>
+<li><a href="#211-defaultresourceloader">2.1.1 DefaultResourceLoader</a></li>
+<li><a href="#212-getresource%E6%96%B9%E6%B3%95">2.1.2 getResource方法</a></li>
+<li><a href="#212-protocolresolver">2.1.2 ProtocolResolver</a></li>
+</ul>
+</li>
+<li><a href="#22-filesystemresourceloader">2.2 FileSystemResourceLoader</a>
+<ul>
+<li><a href="#221-filesystemcontextresource">2.2.1 FileSystemContextResource</a></li>
+</ul>
+</li>
+<li><a href="#23-classrelativeresourceloader">2.3 ClassRelativeResourceLoader</a></li>
+<li><a href="#24-resourcepatternresolver">2.4 ResourcePatternResolver</a></li>
+<li><a href="#25-pathmatchingresourcepatternresolver">2.5 PathMatchingResourcePatternResolver</a>
+<ul>
+<li><a href="#251-%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0">2.5.1 构造函数</a></li>
+<li><a href="#252-getresource">2.5.2 getResource</a></li>
+<li><a href="#253-getresources">2.5.3 getResources</a></li>
+<li><a href="#254-findallclasspathresources">2.5.4 findAllClassPathResources</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/spring">
+              <h3 class="post-title">
+                Spring-IoC的理解
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

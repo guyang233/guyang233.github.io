@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://guyang233.github.io</id>
     <title>Gridea</title>
-    <updated>2020-01-14T14:02:20.446Z</updated>
+    <updated>2020-03-02T00:57:36.365Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://guyang233.github.io"/>
     <link rel="self" href="https://guyang233.github.io/atom.xml"/>
@@ -10,6 +10,1255 @@
     <logo>https://guyang233.github.io/images/avatar.png</logo>
     <icon>https://guyang233.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, Gridea</rights>
+    <entry>
+        <title type="html"><![CDATA[IoC之加载BeanDefinition]]></title>
+        <id>https://guyang233.github.io/post/ioc-zhi-jia-zai-beandefinition</id>
+        <link href="https://guyang233.github.io/post/ioc-zhi-jia-zai-beandefinition">
+        </link>
+        <updated>2020-03-01T14:21:40.000Z</updated>
+        <content type="html"><![CDATA[<pre><code>ClassPathResource resource = new ClassPathResource(&quot;bean.xml&quot;); // &lt;1&gt;
+DefaultListableBeanFactory factory = new DefaultListableBeanFactory(); // &lt;2&gt;
+XmlBeanDefinitionReader reader = new XmlBeanDefinitionReader(factory); // &lt;3&gt;
+reader.loadBeanDefinitions(resource); // &lt;4&gt;
+</code></pre>
+<ul>
+<li>这段代码是Spring编程式中使用IoC容器，可以判断IoC容器的使用过程
+<ul>
+<li>获取资源</li>
+<li>创建BeanFactory</li>
+<li>根据新创建的BeanFactory创建一个BeanDefinitionReader对象，该reader对象为资源解析器</li>
+<li>装载资源</li>
+</ul>
+</li>
+<li>整个过程分为三个步骤，资源定位、装载、注册
+<ul>
+<li>资源定位：我们一般用外部资源来描述Bean对象，所以在初始化IoC容器的第一步就是要定位外部资源。</li>
+<li>装载：装载就是BeanDefinition的载入，BeanDefinitionReader读取、解析Resource资源，也就是将用户定义的Bean表示成为IoC容器的内部数据结构，BeanDefinition</li>
+<li>在IoC容器内部中维护着一个BeanDefinitionMap的数据结构</li>
+<li>在配置文件中每一个<bean>都对应着一个BeanDefinition对象。BeanDefinitionReader，主要定义资源文件读取并转换为BeanDefinition的各个功能</li>
+<li>注册：向IoC容器注册在第二步解析好的BeanDefinition，这个过程是通过BeanDefinitionRegistry接口实现的，在IoC容器内部其实就是将第二过程解析得到的BeanDefinition注入到一个 HashMap容器中，IoC容器就是通过这个HashMap来维护这些BeanDefinition的</li>
+<li><img src="https://guyang233.github.io/post-images/1583108382024.png" alt="" loading="lazy">
+<ul>
+<li>在这里需要注意的一点是这个过程中并没有完成依赖注入（Bean创建），Bean创建是发生在应用的第一次调用#getBean方法，想容器索要Bean时</li>
+<li>当然我们饿可以通过设置预处理，即对某个Bean设置lazyinit = false属性，那么这个Bean的依赖注入就会在容器初始化的时候完成</li>
+<li>简单的说，其实上面的步骤的结果就是：XML Resource =&gt; XML Document =&gt; XML BeanDefinition</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="1-loadbeandefinitions">1、loadBeanDefinitions</h4>
+<ul>
+<li>资源定位之前说过，直接分析加载，<code>reader.loadBeanDefinitions(resource);</code>这句代码才是加载资源的真正实现，所以直接从该方法下手。</li>
+</ul>
+<pre><code>@Override
+public int loadBeanDefinitions(Resource resource) throws BeanDefinitionStoreException {
+		return loadBeanDefinitions(new EncodedResource(resource));
+	}
+</code></pre>
+<ul>
+<li>从指定的XML文件中加载Bean Definition，这里先会对reource 资源封装成EncodedResource对象，为什么需要封装成为EncodedResource呢，主要是为了对Resource进行编码，保证内容读取的正确性。</li>
+<li>然后又调用#loadBeanDefinitions方法来实现真正的逻辑</li>
+</ul>
+<pre><code>public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
+		Assert.notNull(encodedResource, &quot;EncodedResource must not be null&quot;);
+		if (logger.isTraceEnabled()) {
+			logger.trace(&quot;Loading XML bean definitions from &quot; + encodedResource);
+		}
+		//1、获取已经加载过得资源
+		Set&lt;EncodedResource&gt; currentResources = this.resourcesCurrentlyBeingLoaded.get();
+		if (currentResources == null) {
+			currentResources = new HashSet&lt;&gt;(4);
+			this.resourcesCurrentlyBeingLoaded.set(currentResources);
+		}
+		//将当前资源添加进去，如果资源已经存在，抛出异常
+		if (!currentResources.add(encodedResource)) {
+			throw new BeanDefinitionStoreException(
+					&quot;Detected cyclic loading of &quot; + encodedResource + &quot; - check your import definitions!&quot;);
+		}
+		try {
+			//2、从 EncodedResource 获取封装的 Resource ，并从 Resource 中获取其中的 InputStream
+			InputStream inputStream = encodedResource.getResource().getInputStream();
+			try {
+				InputSource inputSource = new InputSource(inputStream);
+				if (encodedResource.getEncoding() != null) {
+					inputSource.setEncoding(encodedResource.getEncoding());
+				}
+				//执行加载
+				return doLoadBeanDefinitions(inputSource, encodedResource.getResource());
+			}
+			finally {
+				inputStream.close();
+			}
+		}
+		catch (IOException ex) {
+			throw new BeanDefinitionStoreException(
+					&quot;IOException parsing XML document from &quot; + encodedResource.getResource(), ex);
+		}
+		finally {
+			//3、从缓存中剔除资源
+			currentResources.remove(encodedResource);
+			if (currentResources.isEmpty()) {
+				this.resourcesCurrentlyBeingLoaded.remove();
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>1、 通过resourcesCurrentlyBeingLoaded.get()来获取已经加载过的资源，然后将encodedResource加入其中，如果已经存在该资源，抛出异常
+<ul>
+<li>为什么要这样做呢？Detected cyclic loading ，避免一个encodedResource在加载中，没有加载完成的时候又加载自身，从而导致死循环。</li>
+<li>因此在3的步骤时，资源加载完成后，要从缓存中剔除资源</li>
+</ul>
+</li>
+<li>2、 从EncodedResource获取封装的Resource资源，并从Resource中获取相应的InputStream，然后将InputStream封装为InputSource，最后调用#doLoadBeanDefinitions，执行整整的Bean Definition加载逻辑。</li>
+</ul>
+<pre><code>protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
+			throws BeanDefinitionStoreException {
+
+		try {
+            //获取XML DOCUMENT实例
+			Document doc = doLoadDocument(inputSource, resource);
+            //根据Document实例注册Bean信息
+			int count = registerBeanDefinitions(doc, resource);
+			if (logger.isDebugEnabled()) {
+				logger.debug(&quot;Loaded &quot; + count + &quot; bean definitions from &quot; + resource);
+			}
+			return count;
+		}
+		catch (BeanDefinitionStoreException ex) {
+			throw ex;
+		}
+		catch (SAXParseException ex) {
+			throw new XmlBeanDefinitionStoreException(resource.getDescription(),
+					&quot;Line &quot; + ex.getLineNumber() + &quot; in XML document from &quot; + resource + &quot; is invalid&quot;, ex);
+		}
+		catch (SAXException ex) {
+			throw new XmlBeanDefinitionStoreException(resource.getDescription(),
+					&quot;XML document from &quot; + resource + &quot; is invalid&quot;, ex);
+		}
+		catch (ParserConfigurationException ex) {
+			throw new BeanDefinitionStoreException(resource.getDescription(),
+					&quot;Parser configuration exception parsing XML from &quot; + resource, ex);
+		}
+		catch (IOException ex) {
+			throw new BeanDefinitionStoreException(resource.getDescription(),
+					&quot;IOException parsing XML document from &quot; + resource, ex);
+		}
+		catch (Throwable ex) {
+			throw new BeanDefinitionStoreException(resource.getDescription(),
+					&quot;Unexpected exception parsing XML document from &quot; + resource, ex);
+		}
+	}
+</code></pre>
+<ul>
+<li>在1处，调用doLoadDocument方法， 根据XML文件获取Document实例</li>
+<li>在2处，调用registerBeanDefinitions方法，根据Document来注册Bean Definition</li>
+</ul>
+<pre><code>/**
+ * 获取 XML Document 实例
+ *
+ * Actually load the specified document using the configured DocumentLoader.
+ * @param inputSource the SAX InputSource to read from
+ * @param resource the resource descriptor for the XML file
+ * @return the DOM Document
+ * @throws Exception when thrown from the DocumentLoader
+ * @see #setDocumentLoader
+ * @see DocumentLoader#loadDocument
+ */
+protected Document doLoadDocument(InputSource inputSource, Resource resource) throws Exception {
+	return this.documentLoader.loadDocument(inputSource, getEntityResolver(), this.errorHandler,
+			getValidationModeForResource(resource), isNamespaceAware());
+}
+</code></pre>
+<ul>
+<li>1、调用 #getValidationModeForResource(Resource resource) 方法，获取指定资源（xml）的验证模式</li>
+<li>2、调用 DocumentLoader#loadDocument(InputSource inputSource, EntityResolver entityResolver, ErrorHandler errorHandler, int validationMode, boolean namespaceAware) 方法，获取 XML Document 实例</li>
+</ul>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[二叉树遍历]]></title>
+        <id>https://guyang233.github.io/post/er-cha-shu-bian-li</id>
+        <link href="https://guyang233.github.io/post/er-cha-shu-bian-li">
+        </link>
+        <updated>2020-01-14T08:51:11.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="1-深度遍历">1、深度遍历</h3>
+<ul>
+<li>前序：根结点-----左子树-----右子树</li>
+<li>中序：左子树-----根结点-----右子树</li>
+<li>后序：左子树-----右子树-----根结点</li>
+</ul>
+<h3 id="2-广度遍历">2、广度遍历</h3>
+<ul>
+<li>层次遍历：只需要按照层次遍历即可</li>
+</ul>
+<h3 id="3-示例">3、示例</h3>
+<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578992143214.png" alt="" loading="lazy"></figure>
+<ul>
+<li>前序遍历：1、2、4、5、 7、 8、 3、 6
+<ul>
+<li>递归遍历</li>
+</ul>
+<pre><code>/**
+ * 前序遍历
+ */
+public void preOrderTraversal(TreeNode root){
+    if (root != null){
+        System.out.println(root.value);
+        preOrderTraversal(root.getLeft());
+        preOrderTraversal(root.getRight());
+    }
+}
+</code></pre>
+<ul>
+<li>非递归遍历</li>
+</ul>
+<pre><code>/**
+ * 前序遍历2，非递归
+ * 优先访问根结点，然后访问左子树和右子树
+ * 当左子树不为空的时候，重复
+ * 当左子树为空的时候，切换为右子树
+ */
+public void preOrderTraversal2(TreeNode root){
+    LinkedList&lt;TreeNode&gt; linkedList = new LinkedList&lt;&gt;();
+    TreeNode pNode = root;
+    while(pNode != null || !linkedList.isEmpty()){
+        if (pNode !=null){
+            System.out.println(pNode.value);
+            linkedList.push(pNode);
+            pNode = pNode.left;
+        } else {
+            TreeNode node = linkedList.pop();
+            pNode = node.right;
+        }
+    }
+}
+</code></pre>
+</li>
+<li>中序遍历：4、 2、 7、 5、 8、 1、 3、 6
+<ul>
+<li>递归遍历</li>
+</ul>
+<pre><code>/**
+ * 递归中序遍历
+ */
+public void midOrderTraversal(TreeNode root){
+    if (root != null){
+        midOrderTraversal(root.getLeft());
+        System.out.println(root.value);
+        midOrderTraversal(root.getRight());
+    }
+}
+</code></pre>
+<ul>
+<li>非递归遍历</li>
+</ul>
+<pre><code>/**
+ * 非递归前序遍历
+ * 1、先是不断的去寻找左子树
+ * 2、找到最左的第一个孩子没有左子树的结点
+ * 3、输出节点（父结点的值），并且遍历该结点的右孩子
+ * 4、遍历完右孩子之后，stack.pop()，是该结点的父结点
+ * 5、重复上述步骤
+ */
+public void midOrderTraversal2(TreeNode root){
+   LinkedList&lt;TreeNode&gt; stack = new LinkedList&lt;&gt;();
+   TreeNode pNode = root;
+   while (pNode !=null || !stack.isEmpty()){
+       if (pNode != null){
+           stack.push(pNode);
+           pNode = pNode.left;
+       } else {
+           TreeNode node = stack.pop();
+           System.out.println(node.value);
+           pNode = node.right;
+       }
+   }
+}
+</code></pre>
+<ul>
+<li>后序遍历：4、 7、 8、 5、 2、 6、 3、 1
+<ul>
+<li>递归遍历</li>
+</ul>
+<pre><code>/**
+ * 递归后序遍历
+ */
+public void postOrderTraversal(TreeNode root){
+    if (root != null){
+        midOrderTraversal(root.getLeft());
+        midOrderTraversal(root.getRight());
+        System.out.println(root.value);
+    }
+}
+</code></pre>
+<ul>
+<li>非递归遍历</li>
+</ul>
+<pre><code> /**
+ * 递归后序遍历
+ * 1、借助两个stack来实现
+ * 2、判断root是否为空，不为空的话压入stack2
+ * 3、判断左右子树，不为空的话压入stack1，压入的顺序是：左-&gt;右
+ * 4、从stack1中按照先压入根，然后压入左，最后压入右
+ * 5、逻辑中，根结点先被压入stack2中，然后从stack1中弹出右，压入stack2中，最后弹出左，压入stack2中，stack2中的顺序为：根-右-左
+ * 6、依次弹出stack2中的结点。按照左-右-根的顺序
+ */
+public void postOrderTraversal2(TreeNode root){
+   if (root != null){
+       LinkedList&lt;TreeNode&gt; stack1 = new LinkedList&lt;&gt;();
+       LinkedList&lt;TreeNode&gt; stack2 = new LinkedList&lt;&gt;();
+       stack1.push(root);
+       while (!stack1.isEmpty()){
+           root = stack1.pop();
+           stack2.push(root);
+           if (root.left != null){
+               stack1.push(root.left);
+           }
+           if (root.right != null){
+               stack1.push(root.right);
+           }
+       }
+       while (!stack2.isEmpty()){
+           System.out.println(stack2.pop().value);
+       }
+   }
+}
+</code></pre>
+</li>
+</ul>
+</li>
+<li>层次遍历</li>
+</ul>
+<pre><code>/**
+     * 层次遍历
+     * 1、先将root结点放进队列，出队列输出
+     * 2、将不为空的左右子树放进队列，出队列输出
+     * @param root 根结点
+     */
+    public void levelTraverse(TreeNode root){
+        TreeNode node;
+        if (root != null){
+            //初始化队列
+            LinkedList&lt;TreeNode&gt; queue = new LinkedList&lt;&gt;();
+            //根结点入队列
+            queue.offer(root);
+            while(!queue.isEmpty()){
+                //出队列
+                node = queue.poll();
+                System.out.println(node.value);
+                //左节点入队列
+                if (node.left != null){
+                    queue.offer(node.left);
+                }
+                //右节点入队列
+                if (node.right != null){
+                    queue.offer(node.right);
+                }
+            }
+        }
+    }
+</code></pre>
+<h3 id="4-二叉树的构建">4、二叉树的构建</h3>
+<ul>
+<li>前序遍历和中序遍历构建二叉树</li>
+<li>中序遍历和后续遍历构建二叉树</li>
+</ul>
+<pre><code>/**
+     *      * 1、前序和后序能够直接确定根节点
+     *      * 2、然后根据中序遍历能够确定左右子树
+     *      * 3、根据前序和后序能够确定左右子树的根结点
+     *      * 4、递归重复上述步骤
+     *      *
+     *      * 由前序遍历和中序遍历，或后序遍历和中序遍历推导简历二叉树
+     *      * @param preOrder 前序遍历的序列
+     *      * @param midOrder 中序遍历的序列
+     *      * @param preIndex 前序遍历开始位置
+     *      * @param midIndex 中序遍历开始位置
+     *      * @param count 节点数
+     */
+    public TreeNode(String preOrder, String midOrder, int preIndex, int midIndex, int count){
+        if (count &gt; 0){
+            //获取前序遍历根节点
+            char r = preOrder.charAt(preIndex);
+            //记录根结点在中序遍历序列的位置
+            int i = 0;
+            for (; i &lt; count; i++){
+                if (r == midOrder.charAt(i)){
+                    break;
+                }
+            }
+            TreeNode node = new TreeNode(Integer.parseInt(String.valueOf(r)));
+            //递归构造左右子树
+            node.left = new TreeNode(preOrder, midOrder, preIndex + 1, midIndex, i);
+            node.right = new TreeNode(preOrder, midOrder, preIndex + i +1, midIndex + i + 1, count - i -1);
+        }
+    }
+</code></pre>
+<ul>
+<li>完全二叉树的层次序列构建二叉树</li>
+</ul>
+<pre><code>   /**
+     * 完全二叉树的层次序列构建二叉树
+     * @param order 层次序列
+     * @param index 根结点位置
+     */
+    public TreeNode(String order, Integer index){
+        if (index &lt; order.length()){
+            TreeNode node = new TreeNode((int) order.charAt(index));
+            //建立左右子树
+            node.left = new TreeNode(order, 2 * index + 1);
+            node.right = new TreeNode(order, 2 * index + 2);
+        }
+    }
+</code></pre>
+<ul>
+<li>标明空子树的前序序列构建二叉树</li>
+</ul>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[数据结构-二叉树]]></title>
+        <id>https://guyang233.github.io/post/shu-ju-jie-gou-er-cha-shu</id>
+        <link href="https://guyang233.github.io/post/shu-ju-jie-gou-er-cha-shu">
+        </link>
+        <updated>2020-01-13T08:03:08.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="1-简介">1、简介</h3>
+<ul>
+<li>什么是二叉树
+<ul>
+<li>本身是有序树</li>
+<li>树中包含各个结点的度不能超过2，即只能是0,1,2<br>
+<img src="https://guyang233.github.io/post-images/1578902741017.gif" alt="" loading="lazy"></li>
+</ul>
+<h3 id="2-叉树的性质">2、叉树的性质</h3>
+<ul>
+<li>二叉树中，第i层最多有2的（i-1）次幂个结点</li>
+<li>如果二叉树的深度为K，那么此二叉树最多有2的K次幂减1个结点</li>
+<li>二叉树中，终端节点数（叶子节点数）为n0，度为2的结点数为n2，则n0 = n2 + 1。</li>
+</ul>
+</li>
+</ul>
+<pre><code>对于一个二叉树来说，除了度为0的叶子节点和度为2的结点，剩下的就是度为1的结点，那么总结点n = n0
++n1+n2。同时，对于每一个结点来说都是父结点分支表示的，假设数中分枝数为B，那么总结点数n 
+= B+1。而分枝数是可以通过n1和n2表示的，即 B=n1+2*n2。所以，n 用另外一种方式表示为 
+n=n1+2*n2+1。 两种方式得到的 n 值组成一个方程组，就可以得出 n0=n2+1。
+</code></pre>
+<h3 id="3-满二叉树">3、满二叉树</h3>
+<ul>
+<li>如果二叉树中除了叶子节点，每个结点的度都为2，则此二叉树称为满二叉树<br>
+<img src="https://guyang233.github.io/post-images/1578904931478.gif" alt="" loading="lazy"></li>
+<li>满二叉树除了满足普通二叉树的性质，又具备以下性质：
+<ul>
+<li>满二叉树中第i层的结点数为2的n-1次幂</li>
+<li>深度为K的满二叉树必有2的k次幂减1个结点，叶子数为2的k-1次幂</li>
+<li>满二叉树中不存在度为1额结点，每一个分支点中都有两颗深度相同的子树，且叶子节点都在最底层</li>
+<li>具有n个结点的满二叉树的深度为log2(n+1)。</li>
+</ul>
+</li>
+</ul>
+<h3 id="4-完全二叉树">4、完全二叉树</h3>
+<ul>
+<li>如果二叉树中除去最后一层节点为满二叉树，且最后一层的结点依次从左到右分布，则此二叉树被称为完全二叉树<br>
+<img src="https://guyang233.github.io/post-images/1578905309119.png" alt="" loading="lazy"></li>
+<li>完全二叉树除了具备普通二叉树的性质，自身也有一些独特的性质，比如说，n个结点的完全二叉树的深度为 ⌊log2n⌋+1</li>
+</ul>
+<pre><code>⌊log2n⌋ 表示取小于 log2n 的最大整数。例如，⌊log24⌋ = 2，而 ⌊log25⌋ 结果也是 2。
+</code></pre>
+<ul>
+<li>对于任意一个完全二叉树来说，如果将含有的结点按照层次从左到右分布，，对于任意一个结点i，完全二叉树还有以下几个结论成立
+<ul>
+<li>当 i&gt;1 时，父亲结点为结点 [i/2] 。（i=1 时，表示的是根结点，无父亲结点）</li>
+<li>如果 2<em>i&gt;n（总结点的个数） ，则结点 i 肯定没有左孩子（为叶子结点）；否则其左孩子是结点 2</em>i。</li>
+<li>如果 2<em>i+1&gt;n ，则结点 i 肯定没有右孩子；否则右孩子是结点 2</em>i+1 。</li>
+</ul>
+</li>
+</ul>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[数据结构-树存储结构]]></title>
+        <id>https://guyang233.github.io/post/shu-ju-jie-gou-shu-cun-chu-jie-gou</id>
+        <link href="https://guyang233.github.io/post/shu-ju-jie-gou-shu-cun-chu-jie-gou">
+        </link>
+        <updated>2020-01-13T07:12:41.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="1-简介">1、简介</h3>
+<ul>
+<li>一种非线性存储结构。存储的是具有一对多关系的数据元素集合<br>
+<img src="https://guyang233.github.io/post-images/1578899735338.png" alt="" loading="lazy"></li>
+</ul>
+<h3 id="2-树的结点">2、树的结点</h3>
+<ul>
+<li>结点：使用树结构存储的每一个元素都被称为“结点”。</li>
+<li>父结点（双亲结点）、子结点和兄弟结点：对于途中的A来说，A是B、C、D的父结点，也叫做双亲结点，B对于A来说就是子结点，B、C、D具有相同的父结点，所以他们之间为兄弟结点。</li>
+<li>树（简称根结点）：每一个非空树都有且只有一个被称为根的结点，图中A结点为根结点。</li>
+<li>叶子结点：如果结点没有任何的字结点，那么此结点被称为叶子结点（叶结点）</li>
+</ul>
+<h3 id="3-子树和空树">3、子树和空树</h3>
+<ul>
+<li>子树：上图来说，整棵树的根结点为A，如果单看B、E、F、K、L组成的部分来说，也是一棵树，而且结点B为这棵树的根结点。单个结点也是一棵树，只不过跟结点就是他本身，K、L都是树，而且整颗树都是子树。树也可以定义为根结点和若干颗子树构成的。</li>
+<li>空树：如果集合本省为空，那么构成的树就被称为空树。空树中没有结点。</li>
+<li>补充：在拥有同一个跟结点的子树之间不能相互有交集。否则破坏了树的结构。</li>
+</ul>
+<h3 id="4-结点的度和层次">4、结点的度和层次</h3>
+<ul>
+<li>对于一个结点，拥有的子树数（结点有多少分支）被称为结点的度（Degree），上图中A结点有三颗子树，所以A结点的度为3。一棵树的度是树内各结点的度的最大值，上图A结点的度的值最大，为3，所以整颗树的度就是3。</li>
+<li>结点的层次：从一颗树的树根开始，树根所在的层为第一层，根的孩子结点所在的层为第二层，以此类推，上图的层次最大为4层，一棵树的深度（高度）是树中结点所在的最大层次，为4。</li>
+<li>如果两个结点的父结点虽不相同，但是父结点处在同一层次上面，那么这两个结点就是堂兄弟的关系。</li>
+</ul>
+<h3 id="5-有序树和无序数">5、有序树和无序数</h3>
+<ul>
+<li>如果树中结点的子树从左看到右，谁在左边谁在右边是有规定的，那么这棵树成为有序树，反之则是无序树</li>
+<li>在有序树中，一个结点的最左边的子树称为第一个孩子，最右边的成为最后一个孩子</li>
+<li>上图：如果是一颗有序树，则结点B为根结点的子树为整棵树的第一个孩子，结点D为根结点的子树为最后一个孩子</li>
+</ul>
+<h3 id="6-森林">6、森林</h3>
+<ul>
+<li>由m（m&gt;=0）个互不相交的树组成的集合被称为森林，上图，B、C、D为根结点的三颗子树就可以被称为森林。</li>
+<li>数还可用一个式子表达Tree=（root，F），root表示树的根结点，F为森林。</li>
+</ul>
+<h3 id="7-树的表示方法">7、树的表示方法</h3>
+<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578901507284.png" alt="" loading="lazy"></figure>
+<ul>
+<li>左边是嵌套的集合形式，集合之间不能相交。</li>
+<li>右边是凹入表示法。最长条为根结点，相同长度的表示为在同一层次</li>
+<li>广义表：(A , ( B ( E ( K , L ) , F ) , C ( G ) , D ( H ( M ) , I , J ) ) )</li>
+</ul>
+<h3 id="8-总结">8、总结</h3>
+<ul>
+<li>树形存储结构类似于家族中的族谱，各个结点之间也同样可能具有父子、兄弟、表兄弟的关系</li>
+</ul>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[IoC之Spring统一资源加载]]></title>
+        <id>https://guyang233.github.io/post/ioc-zhi-spring-tong-yi-zi-yuan-jia-zai</id>
+        <link href="https://guyang233.github.io/post/ioc-zhi-spring-tong-yi-zi-yuan-jia-zai">
+        </link>
+        <updated>2020-01-13T02:44:02.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="1-统一资源resource">1、统一资源：Resource</h3>
+<ul>
+<li>为Spring框架资源的抽象和访问接口，继承InputStreamSource接口，作为资源的统一抽象，Resource定义了一些通用的方法，由子类AbstractResource提供统一的默认实现。</li>
+</ul>
+<pre><code>  public interface Resource extends InputStreamSource {
+
+	/**
+	 * 资源是否存在
+	 */
+	boolean exists();
+
+	/**
+	 * 资源是否可读
+	 */
+	default boolean isReadable() {
+		return true;
+	}
+
+	/**
+	 * 资源所代表的句柄是否被一个 stream 打开了
+	 */
+	default boolean isOpen() {
+		return false;
+	}
+
+	/**
+	 * 是否为 File
+	 */
+	default boolean isFile() {
+		return false;
+	}
+
+	/**
+	 * 返回资源的 URL 的句柄
+	 */
+	URL getURL() throws IOException;
+
+	/**
+	 * 返回资源的 URI 的句柄
+	 */
+	URI getURI() throws IOException;
+
+	/**
+	 * 返回资源的 File 的句柄
+	 */
+	File getFile() throws IOException;
+
+	/**
+	 * 返回 ReadableByteChannel
+	 */
+	default ReadableByteChannel readableChannel() throws IOException {
+		return java.nio.channels.Channels.newChannel(getInputStream());
+	}
+
+	/**
+	 * 资源内容的长度
+	 */
+	long contentLength() throws IOException;
+
+	/**
+	 * 资源最后的修改时间
+	 */
+	long lastModified() throws IOException;
+
+	/**
+	 * 根据资源的相对路径创建新资源
+	 */
+	Resource createRelative(String relativePath) throws IOException;
+
+	/**
+	 * 资源的文件名
+	 */
+	@Nullable
+	String getFilename();
+
+	/**
+	 * 资源的描述
+	 */
+	String getDescription();
+  }
+</code></pre>
+<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578884649610.png" alt="" loading="lazy"></figure>
+<ul>
+<li>FileSystemResource:对java.io.File类型的资源封装。只要是跟File打交道的，基本上与FileSystemResource也可以打交道。支持文件和URL形式，实现WritableResource接口。从Spring5.0开始，FileSystemResource使用NIO2 API进行读/写交互</li>
+<li>ByteArrayResource ：对字节数组提供的数据的封装，通过InputStream形式访问该类型的资源，该实现会根据字节数组的数据构造一个相应的ByteArrayInputStream</li>
+<li>UrlResource ：对java.net.URL类型资源的封装，内部委派URl进行具体的资源操作</li>
+<li>ClassPathResource：class path类型资源的封装，使用给定的ClassLoader或者给定的Class来加载资源</li>
+<li>InputStreamResource：将给定的InputStream作为一种资源的Resource实现类。</li>
+</ul>
+<h4 id="12-abstractresource">1.2 AbstractResource</h4>
+<ul>
+<li>Resource接口的默认抽象实现，实现了Resource接口的大部分的公共实现。Resource接口中的重中之重，定义如下：</li>
+</ul>
+<pre><code>public abstract class AbstractResource implements Resource {
+
+	/**
+	 * 判断文件是否存在，若判断过程产生异常（因为会调用SecurityManager来判断），就关闭对应的流
+	 */
+	@Override
+	public boolean exists() {
+		try {
+		  // 基于 File 进行判断
+			return getFile().exists();
+		}
+		catch (IOException ex) {
+			// Fall back to stream existence: can we open the stream?
+			// 基于 InputStream 进行判断
+			try {
+				InputStream is = getInputStream();
+				is.close();
+				return true;
+			} catch (Throwable isEx) {
+				return false;
+			}
+		}
+	}
+
+	/**
+	 * 直接返回true，表示可读
+	 */
+	@Override
+	public boolean isReadable() {
+		return true;
+	}
+
+	/**
+	 * 直接返回 false，表示未被打开
+	 */
+	@Override
+	public boolean isOpen() {
+		return false;
+	}
+
+	/**
+	 * 直接返回false，表示不为 File
+	 */
+	@Override
+	public boolean isFile() {
+		return false;
+	}
+
+	/**
+	 * 抛出 FileNotFoundException 异常，交给子类实现
+	 */
+	@Override
+	public URL getURL() throws IOException {
+		throw new FileNotFoundException(getDescription() + &quot; cannot be resolved to URL&quot;);
+
+	}
+
+	/**
+	 * 基于 getURL() 返回的 URL 构建 URI
+	 */
+	@Override
+	public URI getURI() throws IOException {
+		URL url = getURL();
+		try {
+			return ResourceUtils.toURI(url);
+		} catch (URISyntaxException ex) {
+			throw new NestedIOException(&quot;Invalid URI [&quot; + url + &quot;]&quot;, ex);
+		}
+	}
+
+	/**
+	 * 抛出 FileNotFoundException 异常，交给子类实现
+	 */
+	@Override
+	public File getFile() throws IOException {
+		throw new FileNotFoundException(getDescription() + &quot; cannot be resolved to absolute file path&quot;);
+	}
+
+	/**
+	 * 根据 getInputStream() 的返回结果构建 ReadableByteChannel
+	 */
+	@Override
+	public ReadableByteChannel readableChannel() throws IOException {
+		return Channels.newChannel(getInputStream());
+	}
+
+	/**
+	 * 获取资源的长度
+	 *
+	 * 这个资源内容长度实际就是资源的字节长度，通过全部读取一遍来判断
+	 */
+	@Override
+	public long contentLength() throws IOException {
+		InputStream is = getInputStream();
+		try {
+			long size = 0;
+			byte[] buf = new byte[255]; // 每次最多读取 255 字节
+			int read;
+			while ((read = is.read(buf)) != -1) {
+				size += read;
+			}
+			return size;
+		} finally {
+			try {
+				is.close();
+			} catch (IOException ex) {
+			}
+		}
+	}
+
+	/**
+	 * 返回资源最后的修改时间
+	 */
+	@Override
+	public long lastModified() throws IOException {
+		long lastModified = getFileForLastModifiedCheck().lastModified();
+		if (lastModified == 0L) {
+			throw new FileNotFoundException(getDescription() +
+					&quot; cannot be resolved in the file system for resolving its last-modified timestamp&quot;);
+		}
+		return lastModified;
+	}
+
+	protected File getFileForLastModifiedCheck() throws IOException {
+		return getFile();
+	}
+
+	/**
+	 * 抛出 FileNotFoundException 异常，交给子类实现
+	 */
+	@Override
+	public Resource createRelative(String relativePath) throws IOException {
+		throw new FileNotFoundException(&quot;Cannot create a relative resource for &quot; + getDescription());
+	}
+
+	/**
+	 * 获取资源名称，默认返回 null ，交给子类实现
+	 */
+	@Override
+	@Nullable
+	public String getFilename() {
+		return null;
+	}
+
+	/**
+	 * 返回资源的描述
+	 */
+	@Override
+	public String toString() {
+		return getDescription();
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		return (obj == this ||
+			(obj instanceof Resource &amp;&amp; ((Resource) obj).getDescription().equals(getDescription())));
+	}
+
+	@Override
+	public int hashCode() {
+		return getDescription().hashCode();
+	}
+
+}
+</code></pre>
+<ul>
+<li>如果我们想实现自定义的Resource，不要实现Resource接口，而应该继承AbstractResource抽象类，根据当前的具体资源特性覆盖对应的方法即可</li>
+</ul>
+<h4 id="13-其他子类">1.3 其他子类</h4>
+<ul>
+<li>FileSystemResource</li>
+<li>ByteArrayResource</li>
+<li>UrlResource</li>
+<li>ClassPathResource</li>
+<li>InputStreamResource</li>
+</ul>
+<h3 id="2-统一资源定位resourceloader">2、统一资源定位：ResourceLoader</h3>
+<ul>
+<li>Spring将资源的定义和资源的加载区分开了，Resource定义了统一的资源，那么资源的加载则由ResourceLoader来统一定义。</li>
+<li>ResourceLoader为pring资源的统一加载抽象，具体的资源加载则由相应的实现类来完成，所以我们可以将ResourceLoader作为统一资源定位器。ResourceLoader，定义资源加载器，主要应用于根据给的资源文件地址，返回相应的Resource</li>
+</ul>
+<pre><code>public interface ResourceLoader {
+
+// CLASSPATH URL 前缀。默认为：&quot;classpath:&quot;
+	String CLASSPATH_URL_PREFIX = ResourceUtils.CLASSPATH_URL_PREFIX; 
+
+	Resource getResource(String location);
+
+	ClassLoader getClassLoader();
+
+}
+</code></pre>
+<ul>
+<li>#getResource(String location)方法
+<ul>
+<li>根据资源提供的位置离加载资源，不确保Resource一定存在，需要调用Resource.exist()来判断资源是否存在。支持一下方法来加载：
+<ul>
+<li>支持绝对路径：file:C:/test.dat&quot;.</li>
+<li>伪路径：&quot;classpath:test.dat&quot;.</li>
+<li>支持相对路径：&quot;WEB-INF/test.dat&quot;.</li>
+</ul>
+</li>
+<li>该方法主要是在其子类DefaultResourceLoader中实现。具体过程在分析DefaultResourceLoader时详细说明</li>
+</ul>
+</li>
+<li>#getClassLoader()方法
+<ul>
+<li>返回ClassLoader实例，对于想要获取ResourceLoader使用的ClassLoader用户来说，可以直接调用该方法来获取，在分析Resource是，提到了一个ClassPathResource，这个类是可以根据指定的CLassLoader来加载资源的</li>
+</ul>
+</li>
+</ul>
+<h4 id="21-子类结构">2.1、子类结构</h4>
+<ul>
+<li>作为Spring统一的资源加载器，提供了统一的抽象，具体IDE实现规则有相应的子类来负责实现，结构的类图<br>
+<img src="https://guyang233.github.io/post-images/1578971511318.png" alt="" loading="lazy"></li>
+</ul>
+<h5 id="211-defaultresourceloader">2.1.1 DefaultResourceLoader</h5>
+<ul>
+<li>与AbstractResource相似，是ResourceLoader的默认实现</li>
+<li>构造函数：接收ClassLoader作为构造函数的参数，或者使用不带参数的构造函数
+<ul>
+<li>在使用不带参数的构造函数的时候，使用额ClassLoader为默认的ClassLoader，一般都是Thread.currentThread().getContextClassLoader();</li>
+<li>使用带参数的构造函数时，可以通过 ClassUtils#getDefaultClassLoader()来获取。</li>
+</ul>
+</li>
+</ul>
+<pre><code>@Nullable
+private ClassLoader classLoader;
+// 无参构造函数
+public DefaultResourceLoader() { 
+	this.classLoader = ClassUtils.getDefaultClassLoader();
+}
+// 带 ClassLoader 参数的构造函数
+public DefaultResourceLoader(@Nullable ClassLoader classLoader) { 
+	this.classLoader = classLoader;
+}
+
+public void setClassLoader(@Nullable ClassLoader classLoader) {
+	this.classLoader = classLoader;
+}
+
+@Override
+@Nullable
+public ClassLoader getClassLoader() {
+	return (this.classLoader != null ? this.classLoader : ClassUtils.getDefaultClassLoader());
+}
+另外也可以调用#setClassLoader()方法进行后续设置
+</code></pre>
+<h5 id="212-getresource方法">2.1.2 getResource方法</h5>
+<ul>
+<li>ResourceLoader中最核心的方法为#getResource(String location)</li>
+</ul>
+<pre><code>	@Override
+	public Resource getResource(String location) {
+		Assert.notNull(location, &quot;Location must not be null&quot;);
+
+		//首先遍历protocolResolvers set集合，初始为空的
+		for (ProtocolResolver protocolResolver : this.protocolResolvers) {
+			Resource resource = protocolResolver.resolve(location, this);
+			if (resource != null) {
+				return resource;
+			}
+		}
+		//判断路径是否以“/”开头，是的话采用路径加载Resource
+		if (location.startsWith(&quot;/&quot;)) {
+			return getResourceByPath(location);
+		}
+		//是否是classpath路径，是的话加载classpath资源
+		else if (location.startsWith(CLASSPATH_URL_PREFIX)) {
+			return new ClassPathResource(location.substring(CLASSPATH_URL_PREFIX.length()), getClassLoader());
+		}
+		else {
+			//判断是否为文件URL， 是的话就返回FileUrlResource， 否则返回UrlResource
+			try {
+				// Try to parse the location as a URL...
+				URL url = new URL(location);
+				return (ResourceUtils.isFileURL(url) ? new FileUrlResource(url) : new UrlResource(url));
+			}
+			catch (MalformedURLException ex) {
+				//最后，返回 ClassPathContextResource 类型的资源
+				// No URL -&gt; resolve as resource path.
+				return getResourceByPath(location);
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>首先，通过ProtocolResolver来加载资源，成功返回Resource</li>
+<li>其次，若location以&quot;/&quot;开头，则调用#getResourceByPath()方法，构造ClassPathContextResource类型资源并返回</li>
+</ul>
+<pre><code>	protected Resource getResourceByPath(String path) {
+		return new ClassPathContextResource(path, getClassLoader());
+	}
+</code></pre>
+<ul>
+<li>再次，判断path是否以classpath:开头，是的话构造ClassPathResource类型资源返回在构造该资源时，通过#getClassLoader()获取当前的ClassLoader</li>
+<li>然后构造URL类型的资源，尝试通过它来对资源进行定位，如果没有抛出MalformedURLException异常的话，判断是是否为文件URL，如果是的话构造FileUrlResource，如果不是的话构造UrlResource类型的资源。</li>
+<li>最后，如果抛出MalformedURLException异常，就调用#getResourceByPath方法来加载资源。</li>
+</ul>
+<h5 id="212-protocolresolver">2.1.2 ProtocolResolver</h5>
+<ul>
+<li>ProtocolResolver，用户自定义协议资源解决策略，作为DefaultResourceLoader的SPI：允许用户自定义资源加载协议，而不需要继承ResourceLoader的子类</li>
+<li>在介绍Resource的时候提到如果实现自定义的Resource，我们只需要继承AbstractResource即可，但是有了ProtocolResolver后，我们不需要直接继承DefaultResourceLoader，改为实现ProtocolResolver接口也可以实现自定义的ResourceLoader</li>
+<li>ProtocolResolver只有一个方法</li>
+</ul>
+<pre><code>	/**
+	 * 使用指定的ResourceLoader来加载location的Resource
+	 * 
+	 * 
+	 * Resolve the given location against the given resource loader
+	 * if this implementation's protocol matches.
+	 * @param location the user-specified resource location
+	 * @param resourceLoader the associated resource loader
+	 * @return a corresponding {@code Resource} handle if the given location
+	 * matches this resolver's protocol, or {@code null} otherwise
+	 */
+	@Nullable
+	Resource resolve(String location, ResourceLoader resourceLoader);
+</code></pre>
+<ul>
+<li>在Spring没有该接口的实现类，需要用户自定义，自定义的Resolver想要加入Spring体系，调用DefaultResourceLoader.addProtocolResolver()方法就行</li>
+</ul>
+<pre><code>/**
+	 * Register the given resolver with this resource loader, allowing for
+	 * additional protocols to be handled.
+	 * &lt;p&gt;Any such resolver will be invoked ahead of this loader's standard
+	 * resolution rules. It may therefore also override any default rules.
+	 * @since 4.3
+	 * @see #getProtocolResolvers()
+	 */
+	public void addProtocolResolver(ProtocolResolver resolver) {
+		Assert.notNull(resolver, &quot;ProtocolResolver must not be null&quot;);
+		this.protocolResolvers.add(resolver);
+	}
+</code></pre>
+<h4 id="22-filesystemresourceloader">2.2 FileSystemResourceLoader</h4>
+<ul>
+<li>DefaultResourceLoader对于#getResourceByPath(String)处理的不是很恰当，这个时候我们可以使用FileSystemResourceLoader，他继承了DefaultResourceLoader，并且复写了getResourceByPath，使文件系统加载资源并以FileSystemContextResource类型返回，这样就得到了想要的资源类型：</li>
+</ul>
+<pre><code>	@Override
+	protected Resource getResourceByPath(String path) {
+		if (path.startsWith(&quot;/&quot;)) {
+			path = path.substring(1);
+		}
+		return new FileSystemContextResource(path);
+	}
+</code></pre>
+<h5 id="221-filesystemcontextresource">2.2.1 FileSystemContextResource</h5>
+<ul>
+<li>FileSystemContextResource, 是FileSystemResourceLoader的内部类，继承了FileSystemResource，实现ContextResource接口</li>
+</ul>
+<pre><code>	/**
+	 * FileSystemResource that explicitly expresses a context-relative path
+	 * through implementing the ContextResource interface.
+	 */
+	private static class FileSystemContextResource extends FileSystemResource implements ContextResource {
+
+		public FileSystemContextResource(String path) {
+			super(path);
+		}
+
+		@Override
+		public String getPathWithinContext() {
+			return getPath();
+		}
+	}
+</code></pre>
+<ul>
+<li>在构造器中，调用的是FileSystemResource的构造函数来构造FileSystemResource的</li>
+<li>为什么要有FileSystemContextResource类的原因是，实现ContextResource接口， 并实现对应的#getPathWithinContext()接口方法</li>
+</ul>
+<h4 id="23-classrelativeresourceloader">2.3 ClassRelativeResourceLoader</h4>
+<ul>
+<li>ClassRelativeResourceLoader，是DefaultResourceLoader的另一个子类的实现，和 FileSystemResourceLoader 类似，在实现代码的结构上类似，也是覆写 #getResourceByPath(String path) 方法，并返回其对应的 ClassRelativeContextResource 的资源类型。</li>
+<li>ClassRelativeResourceLoader 扩展的功能是，可以根据给定的 class 所在包或者所在包的子包下加载资源。</li>
+</ul>
+<h4 id="24-resourcepatternresolver">2.4 ResourcePatternResolver</h4>
+<ul>
+<li>ResourceLoader的#getResource方法，每次只能根据location来返回一个Resource，当需要加载多个资源的时候，我们除了多次调用#getResource方法外，没有别的办法。ResourcePatternResolver是ResourceLoader 的扩展，支持根据指定的资源路径匹配模式每次返回多个Resource实例。</li>
+</ul>
+<pre><code>public interface ResourcePatternResolver extends ResourceLoader {
+
+	/**
+	 * Pseudo URL prefix for all matching resources from the class path: &quot;classpath*:&quot;
+	 * This differs from ResourceLoader's classpath URL prefix in that it
+	 * retrieves all matching resources for a given name (e.g. &quot;/beans.xml&quot;),
+	 * for example in the root of all deployed JAR files.
+	 * @see org.springframework.core.io.ResourceLoader#CLASSPATH_URL_PREFIX
+	 */
+	String CLASSPATH_ALL_URL_PREFIX = &quot;classpath*:&quot;;
+
+	/**
+	 * Resolve the given location pattern into Resource objects.
+	 * &lt;p&gt;Overlapping resource entries that point to the same physical
+	 * resource should be avoided, as far as possible. The result should
+	 * have set semantics.
+	 * @param locationPattern the location pattern to resolve
+	 * @return the corresponding Resource objects
+	 * @throws IOException in case of I/O errors
+	 */
+	Resource[] getResources(String locationPattern) throws IOException;
+
+}
+</code></pre>
+<ul>
+<li>ResourcePatternResolver在ResourceLoader的基础上增加了#getResources方法，支持根绝路径匹配模式返回多个Resource实例</li>
+<li>同时，也新增了一种新的协议前缀， &quot;classpath*:&quot;，该协议前缀由其子类负责实现</li>
+</ul>
+<h4 id="25-pathmatchingresourcepatternresolver">2.5 PathMatchingResourcePatternResolver</h4>
+<ul>
+<li>PathMatchingResourcePatternResolver， 是ResourcePatternResovler最常用的子类，除了支持ResourceLoader和ResourcePatternResolver 新增的 &quot;classpath*:&quot; 前缀外，还支持 Ant 风格的路径匹配模式（类似于 &quot;**/*.xml&quot;）</li>
+</ul>
+<h5 id="251-构造函数">2.5.1 构造函数</h5>
+<pre><code>/**
+ * 内置的 ResourceLoader 资源定位器
+ */
+private final ResourceLoader resourceLoader;
+/**
+ * Ant 路径匹配器
+ */
+private PathMatcher pathMatcher = new AntPathMatcher();
+
+public PathMatchingResourcePatternResolver() {
+	this.resourceLoader = new DefaultResourceLoader();
+}
+
+public PathMatchingResourcePatternResolver(ResourceLoader resourceLoader) {
+	Assert.notNull(resourceLoader, &quot;ResourceLoader must not be null&quot;);
+	this.resourceLoader = resourceLoader;
+}
+
+public PathMatchingResourcePatternResolver(@Nullable ClassLoader classLoader) {
+	this.resourceLoader = new DefaultResourceLoader(classLoader);
+}
+</code></pre>
+<ul>
+<li>PathMatchingResourcePatternResolver在实例化的时候，可以指定一个ResourceLoader，如果没有指定的话，会在内部构造一个DefaultResourceLoader</li>
+<li>pathMatcher 属性，默认为 AntPathMatcher 对象，用于支持 Ant 类型的路径匹配。</li>
+</ul>
+<h5 id="252-getresource">2.5.2 getResource</h5>
+<pre><code>	@Override
+	public Resource getResource(String location) {
+		return getResourceLoader().getResource(location);
+	}
+
+    public ResourceLoader getResourceLoader() {
+		return this.resourceLoader;
+	}
+</code></pre>
+<ul>
+<li>这个方法直接委托给响应的ResourceLoader来实现，所以我们如果在实例化PathMatchingResourcePatternResolver的时候，如果未指定ResourceLoader参数的情况下，在加载资源的时候，电泳的是DefaultResourceLoader的#getResource的过程</li>
+</ul>
+<h5 id="253-getresources">2.5.3 getResources</h5>
+<pre><code>	@Override
+	public Resource[] getResources(String locationPattern) throws IOException {
+		Assert.notNull(locationPattern, &quot;Location pattern must not be null&quot;);
+		//以classpath*: 开头
+		if (locationPattern.startsWith(CLASSPATH_ALL_URL_PREFIX)) {
+			// a class path resource (multiple resources for same name possible)
+			//路径包含通配符
+			if (getPathMatcher().isPattern(locationPattern.substring(CLASSPATH_ALL_URL_PREFIX.length()))) {
+				// a class path resource pattern
+				return findPathMatchingResources(locationPattern);
+			}
+			//路径不包含通配符
+			else {
+				// all class path resources with the given name
+				return findAllClassPathResources(locationPattern.substring(CLASSPATH_ALL_URL_PREFIX.length()));
+			}
+		}
+		//不以classpath*: 开头
+		else {
+			// Generally only look for a pattern after a prefix here,
+			// and on Tomcat only after the &quot;*/&quot; separator for its &quot;war:&quot; protocol.
+			int prefixEnd = (locationPattern.startsWith(&quot;war:&quot;) ? locationPattern.indexOf(&quot;*/&quot;) + 1 :
+					locationPattern.indexOf(':') + 1);
+			//包含通配符
+			if (getPathMatcher().isPattern(locationPattern.substring(prefixEnd))) {
+				// a file pattern
+				return findPathMatchingResources(locationPattern);
+			}
+			//不包含通配符
+			else {
+				// a single resource with the given name
+				return new Resource[] {getResourceLoader().getResource(locationPattern)};
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>处理逻辑
+<ul>
+<li>非“classpath*:”开头，且不包含通配符的，直接委托给相应的ResourceLoader来实现</li>
+<li>其他情况，调用#findPathMatchingResources和#findAllClassPathResources来返回多个Resource</li>
+</ul>
+</li>
+</ul>
+<h5 id="254-findallclasspathresources">2.5.4 findAllClassPathResources</h5>
+<ul>
+<li>当locationPattern以“classpath*:”开头，但是不包含通配符，则调用#findAllClassPathResources方法加载资源，返回classes路径下和所有jar包中的所有相匹配的资源</li>
+</ul>
+<pre><code>protected Resource[] findAllClassPathResources(String location) throws IOException {
+	String path = location;
+	// 去除首个 /
+	if (path.startsWith(&quot;/&quot;)) {
+		path = path.substring(1);
+	}
+	// 真正执行加载所有 classpath 资源
+	Set&lt;Resource&gt; result = doFindAllClassPathResources(path);
+	if (logger.isTraceEnabled()) {
+		logger.trace(&quot;Resolved classpath location [&quot; + location + &quot;] to resources &quot; + result);
+	}
+	// 转换成 Resource 数组返回
+	return result.toArray(new Resource[0]);
+}
+</code></pre>
+<ul>
+<li>真正执行加载的是#doFindAllClassPathResources</li>
+</ul>
+<pre><code>protected Set&lt;Resource&gt; doFindAllClassPathResources(String path) throws IOException {
+		Set&lt;Resource&gt; result = new LinkedHashSet&lt;&gt;(16);
+		ClassLoader cl = getClassLoader();
+		//根据ClassLoader加载路径下的所有资源
+		Enumeration&lt;URL&gt; resourceUrls = (cl != null ? cl.getResources(path) : ClassLoader.getSystemResources(path));
+		while (resourceUrls.hasMoreElements()) {
+			URL url = resourceUrls.nextElement();
+			//将URL转为UrlResource
+			result.add(convertClassLoaderURL(url));
+		}
+		if (&quot;&quot;.equals(path)) {
+			// The above result is likely to be incomplete, i.e. only containing file system references.
+			// We need to have pointers to each of the jar files on the classpath as well...
+			//加载路径下面的所有Jar包
+			addAllClassLoaderJarRoots(cl, result);
+		}
+		return result;
+	}
+</code></pre>
+<ul>
+<li>根据ClassLoader加载路径下的所有资源，在加载资源的过程中，如果在构造PathMatchingResourcePatternResolver的时候传入了ClassLoader，那么调用ClassLoader的getResources方法，否则调用ClassLoader#getSystemResources</li>
+<li>ClassLoader#getResources方法：</li>
+</ul>
+<pre><code>
+</code></pre>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Spring-IoC的理解]]></title>
+        <id>https://guyang233.github.io/post/spring</id>
+        <link href="https://guyang233.github.io/post/spring">
+        </link>
+        <updated>2020-01-13T01:42:00.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="1-ioc理论">1、 IoC理论</h3>
+<ul>
+<li>
+<p>IoC，控制反转，别名DI，依赖注入。</p>
+</li>
+<li>
+<p>IoC就是SpringIoC容器来负责生命周期和对象之间的关系。</p>
+</li>
+<li>
+<p>依赖的不是对象本身，是依赖对象提供的服务，IoC的理念就是让别人为你服务。<br>
+<img src="https://guyang233.github.io/post-images/1578880609206.png" alt="" loading="lazy"></p>
+</li>
+<li>
+<p>理解控制反转</p>
+<ul>
+<li>谁控制谁：传统的模式中，都是直接new一个对象的方式来创建对象，依赖对象是直接创建的。但是有了IoC之后是由IoC容器控制。IoC容器控制对象</li>
+<li>控制什么：控制对象</li>
+<li>为什么是反转：正转是主动创建依赖对象，现在是由IoC创建</li>
+<li>那些方面反转了：依赖对象的获取</li>
+</ul>
+</li>
+<li>
+<p>对象的注入形式</p>
+<ul>
+<li>setter</li>
+<li>构造器</li>
+<li>接口</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-各个组件">2、各个组件</h3>
+<h4 id="21-resource体系">2.1 Resource体系</h4>
+<ul>
+<li>对资源的抽象，每一个实现类都代表了一种资源的访问策略ClassPathResource、FileSystemResource等<br>
+<img src="https://guyang233.github.io/post-images/1578881990771.png" alt="" loading="lazy"></li>
+</ul>
+<h5 id="211-resourceloader体系">2.1.1 ResourceLoader体系</h5>
+<ul>
+<li>有了资源，就有资源加载。利用ResourceLoader来进行资源的统一加载。<br>
+<img src="https://guyang233.github.io/post-images/1578882068404.png" alt="" loading="lazy"></li>
+</ul>
+<h4 id="22-beanfactory体系">2.2 BeanFactory体系</h4>
+<ul>
+<li>一个非常纯粹的的bean容器，IoC必备的数据结构，其中BeanDefinition是他的基本结构。BeanFactory内部维护一个BeanDefinition Map，可根据BeandDefinition的描述进行Bean的创建和管理<br>
+<img src="https://guyang233.github.io/post-images/1578882221202.png" alt="" loading="lazy">
+<ul>
+<li>BeanFactory有三个直接子类</li>
+<li>DefaultListableBeanFactory为最终默认实现，他实现了所有的接口。</li>
+</ul>
+</li>
+</ul>
+<h4 id="23-beandefinition体系">2.3 BeanDefinition体系</h4>
+<pre><code>- 用来描述Spring中的Bean对象
+</code></pre>
+<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578883198907.png" alt="" loading="lazy"></figure>
+<h4 id="24-beandefinitionreader体系">2.4 BeanDefinitionReader体系</h4>
+<pre><code>- 作用是读取Spring的配置文件的内容，并将其转换为IoC容器内部的数据结构，BeanDefinition
+</code></pre>
+<figure data-type="image" tabindex="2"><img src="https://guyang233.github.io/post-images/1578883090558.png" alt="" loading="lazy"></figure>
+<h4 id="25-applicationcontext体系">2.5 ApplicationContext体系</h4>
+<ul>
+<li>大名鼎鼎的Spring容器，叫做应用上下文。继承BeanFactory，是BeanFactory的升级版本。与BeanFactory的区别：
+<ul>
+<li>继承MessageResource接口，提供国际化标准访问策略</li>
+<li>继承ApplicationEventPublisher接口，提供强大的事件机制</li>
+<li>扩展ResourceLoader，加载多钟Resource，灵活访问不同的资源</li>
+<li>对web应用的支持</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-总结">3、总结</h3>
+<ul>
+<li>内容参考芋艿的知识星球。搬过来做笔记。</li>
+<li>路漫漫其修远兮，加油！</li>
+</ul>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hello Gridea]]></title>
         <id>https://guyang233.github.io/post/hello-gridea</id>

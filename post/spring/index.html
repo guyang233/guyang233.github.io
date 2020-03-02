@@ -1,0 +1,285 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spring-IoC的理解 | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1583110607046">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="Spring-IoC的理解 | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="1、 IoC理论
+
+
+IoC，控制反转，别名DI，依赖注入。
+
+
+IoC就是SpringIoC容器来负责生命周期和对象之间的关系。
+
+
+依赖的不是对象本身，是依赖对象提供的服务，IoC的理念就是让别人为你服务。
+
+
+
+理解控制反转
+
+谁控制..." />
+    <meta name="keywords" content="Spring" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1583110607046" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              Spring-IoC的理解
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-01-13
+              </span>
+              <span>
+                2 min read
+              </span>
+              
+                <a href="https://guyang233.github.io/tag/5KFZhgCVhM" class="post-tag">
+                  # Spring
+                </a>
+              
+            </div>
+            
+              <img class="post-feature-image" src="https://guyang233.github.io/post-images/spring.png" alt="">
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <h3 id="1-ioc理论">1、 IoC理论</h3>
+<ul>
+<li>
+<p>IoC，控制反转，别名DI，依赖注入。</p>
+</li>
+<li>
+<p>IoC就是SpringIoC容器来负责生命周期和对象之间的关系。</p>
+</li>
+<li>
+<p>依赖的不是对象本身，是依赖对象提供的服务，IoC的理念就是让别人为你服务。<br>
+<img src="https://guyang233.github.io/post-images/1578880609206.png" alt="" loading="lazy"></p>
+</li>
+<li>
+<p>理解控制反转</p>
+<ul>
+<li>谁控制谁：传统的模式中，都是直接new一个对象的方式来创建对象，依赖对象是直接创建的。但是有了IoC之后是由IoC容器控制。IoC容器控制对象</li>
+<li>控制什么：控制对象</li>
+<li>为什么是反转：正转是主动创建依赖对象，现在是由IoC创建</li>
+<li>那些方面反转了：依赖对象的获取</li>
+</ul>
+</li>
+<li>
+<p>对象的注入形式</p>
+<ul>
+<li>setter</li>
+<li>构造器</li>
+<li>接口</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-各个组件">2、各个组件</h3>
+<h4 id="21-resource体系">2.1 Resource体系</h4>
+<ul>
+<li>对资源的抽象，每一个实现类都代表了一种资源的访问策略ClassPathResource、FileSystemResource等<br>
+<img src="https://guyang233.github.io/post-images/1578881990771.png" alt="" loading="lazy"></li>
+</ul>
+<h5 id="211-resourceloader体系">2.1.1 ResourceLoader体系</h5>
+<ul>
+<li>有了资源，就有资源加载。利用ResourceLoader来进行资源的统一加载。<br>
+<img src="https://guyang233.github.io/post-images/1578882068404.png" alt="" loading="lazy"></li>
+</ul>
+<h4 id="22-beanfactory体系">2.2 BeanFactory体系</h4>
+<ul>
+<li>一个非常纯粹的的bean容器，IoC必备的数据结构，其中BeanDefinition是他的基本结构。BeanFactory内部维护一个BeanDefinition Map，可根据BeandDefinition的描述进行Bean的创建和管理<br>
+<img src="https://guyang233.github.io/post-images/1578882221202.png" alt="" loading="lazy">
+<ul>
+<li>BeanFactory有三个直接子类</li>
+<li>DefaultListableBeanFactory为最终默认实现，他实现了所有的接口。</li>
+</ul>
+</li>
+</ul>
+<h4 id="23-beandefinition体系">2.3 BeanDefinition体系</h4>
+<pre><code>- 用来描述Spring中的Bean对象
+</code></pre>
+<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578883198907.png" alt="" loading="lazy"></figure>
+<h4 id="24-beandefinitionreader体系">2.4 BeanDefinitionReader体系</h4>
+<pre><code>- 作用是读取Spring的配置文件的内容，并将其转换为IoC容器内部的数据结构，BeanDefinition
+</code></pre>
+<figure data-type="image" tabindex="2"><img src="https://guyang233.github.io/post-images/1578883090558.png" alt="" loading="lazy"></figure>
+<h4 id="25-applicationcontext体系">2.5 ApplicationContext体系</h4>
+<ul>
+<li>大名鼎鼎的Spring容器，叫做应用上下文。继承BeanFactory，是BeanFactory的升级版本。与BeanFactory的区别：
+<ul>
+<li>继承MessageResource接口，提供国际化标准访问策略</li>
+<li>继承ApplicationEventPublisher接口，提供强大的事件机制</li>
+<li>扩展ResourceLoader，加载多钟Resource，灵活访问不同的资源</li>
+<li>对web应用的支持</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-总结">3、总结</h3>
+<ul>
+<li>内容参考芋艿的知识星球。搬过来做笔记。</li>
+<li>路漫漫其修远兮，加油！</li>
+</ul>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1-ioc%E7%90%86%E8%AE%BA">1、 IoC理论</a></li>
+<li><a href="#2-%E5%90%84%E4%B8%AA%E7%BB%84%E4%BB%B6">2、各个组件</a>
+<ul>
+<li><a href="#21-resource%E4%BD%93%E7%B3%BB">2.1 Resource体系</a>
+<ul>
+<li><a href="#211-resourceloader%E4%BD%93%E7%B3%BB">2.1.1 ResourceLoader体系</a></li>
+</ul>
+</li>
+<li><a href="#22-beanfactory%E4%BD%93%E7%B3%BB">2.2 BeanFactory体系</a></li>
+<li><a href="#23-beandefinition%E4%BD%93%E7%B3%BB">2.3 BeanDefinition体系</a></li>
+<li><a href="#24-beandefinitionreader%E4%BD%93%E7%B3%BB">2.4 BeanDefinitionReader体系</a></li>
+<li><a href="#25-applicationcontext%E4%BD%93%E7%B3%BB">2.5 ApplicationContext体系</a></li>
+</ul>
+</li>
+<li><a href="#3-%E6%80%BB%E7%BB%93">3、总结</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/hello-gridea">
+              <h3 class="post-title">
+                Hello Gridea
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

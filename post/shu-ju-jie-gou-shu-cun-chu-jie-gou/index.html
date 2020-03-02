@@ -1,0 +1,242 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>数据结构-树存储结构 | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1583110607046">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="数据结构-树存储结构 | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="1、简介
+
+一种非线性存储结构。存储的是具有一对多关系的数据元素集合
+
+
+2、树的结点
+
+结点：使用树结构存储的每一个元素都被称为“结点”。
+父结点（双亲结点）、子结点和兄弟结点：对于途中的A来说，A是B、C、D的父结点，也叫做双亲结点，B..." />
+    <meta name="keywords" content="Data" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1583110607046" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              数据结构-树存储结构
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-01-13
+              </span>
+              <span>
+                4 min read
+              </span>
+              
+                <a href="https://guyang233.github.io/tag/nKQBTmz5H" class="post-tag">
+                  # Data
+                </a>
+              
+            </div>
+            
+              <img class="post-feature-image" src="https://guyang233.github.io/post-images/shu-ju-jie-gou-shu-cun-chu-jie-gou.png" alt="">
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <h3 id="1-简介">1、简介</h3>
+<ul>
+<li>一种非线性存储结构。存储的是具有一对多关系的数据元素集合<br>
+<img src="https://guyang233.github.io/post-images/1578899735338.png" alt="" loading="lazy"></li>
+</ul>
+<h3 id="2-树的结点">2、树的结点</h3>
+<ul>
+<li>结点：使用树结构存储的每一个元素都被称为“结点”。</li>
+<li>父结点（双亲结点）、子结点和兄弟结点：对于途中的A来说，A是B、C、D的父结点，也叫做双亲结点，B对于A来说就是子结点，B、C、D具有相同的父结点，所以他们之间为兄弟结点。</li>
+<li>树（简称根结点）：每一个非空树都有且只有一个被称为根的结点，图中A结点为根结点。</li>
+<li>叶子结点：如果结点没有任何的字结点，那么此结点被称为叶子结点（叶结点）</li>
+</ul>
+<h3 id="3-子树和空树">3、子树和空树</h3>
+<ul>
+<li>子树：上图来说，整棵树的根结点为A，如果单看B、E、F、K、L组成的部分来说，也是一棵树，而且结点B为这棵树的根结点。单个结点也是一棵树，只不过跟结点就是他本身，K、L都是树，而且整颗树都是子树。树也可以定义为根结点和若干颗子树构成的。</li>
+<li>空树：如果集合本省为空，那么构成的树就被称为空树。空树中没有结点。</li>
+<li>补充：在拥有同一个跟结点的子树之间不能相互有交集。否则破坏了树的结构。</li>
+</ul>
+<h3 id="4-结点的度和层次">4、结点的度和层次</h3>
+<ul>
+<li>对于一个结点，拥有的子树数（结点有多少分支）被称为结点的度（Degree），上图中A结点有三颗子树，所以A结点的度为3。一棵树的度是树内各结点的度的最大值，上图A结点的度的值最大，为3，所以整颗树的度就是3。</li>
+<li>结点的层次：从一颗树的树根开始，树根所在的层为第一层，根的孩子结点所在的层为第二层，以此类推，上图的层次最大为4层，一棵树的深度（高度）是树中结点所在的最大层次，为4。</li>
+<li>如果两个结点的父结点虽不相同，但是父结点处在同一层次上面，那么这两个结点就是堂兄弟的关系。</li>
+</ul>
+<h3 id="5-有序树和无序数">5、有序树和无序数</h3>
+<ul>
+<li>如果树中结点的子树从左看到右，谁在左边谁在右边是有规定的，那么这棵树成为有序树，反之则是无序树</li>
+<li>在有序树中，一个结点的最左边的子树称为第一个孩子，最右边的成为最后一个孩子</li>
+<li>上图：如果是一颗有序树，则结点B为根结点的子树为整棵树的第一个孩子，结点D为根结点的子树为最后一个孩子</li>
+</ul>
+<h3 id="6-森林">6、森林</h3>
+<ul>
+<li>由m（m&gt;=0）个互不相交的树组成的集合被称为森林，上图，B、C、D为根结点的三颗子树就可以被称为森林。</li>
+<li>数还可用一个式子表达Tree=（root，F），root表示树的根结点，F为森林。</li>
+</ul>
+<h3 id="7-树的表示方法">7、树的表示方法</h3>
+<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578901507284.png" alt="" loading="lazy"></figure>
+<ul>
+<li>左边是嵌套的集合形式，集合之间不能相交。</li>
+<li>右边是凹入表示法。最长条为根结点，相同长度的表示为在同一层次</li>
+<li>广义表：(A , ( B ( E ( K , L ) , F ) , C ( G ) , D ( H ( M ) , I , J ) ) )</li>
+</ul>
+<h3 id="8-总结">8、总结</h3>
+<ul>
+<li>树形存储结构类似于家族中的族谱，各个结点之间也同样可能具有父子、兄弟、表兄弟的关系</li>
+</ul>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1-%E7%AE%80%E4%BB%8B">1、简介</a></li>
+<li><a href="#2-%E6%A0%91%E7%9A%84%E7%BB%93%E7%82%B9">2、树的结点</a></li>
+<li><a href="#3-%E5%AD%90%E6%A0%91%E5%92%8C%E7%A9%BA%E6%A0%91">3、子树和空树</a></li>
+<li><a href="#4-%E7%BB%93%E7%82%B9%E7%9A%84%E5%BA%A6%E5%92%8C%E5%B1%82%E6%AC%A1">4、结点的度和层次</a></li>
+<li><a href="#5-%E6%9C%89%E5%BA%8F%E6%A0%91%E5%92%8C%E6%97%A0%E5%BA%8F%E6%95%B0">5、有序树和无序数</a></li>
+<li><a href="#6-%E6%A3%AE%E6%9E%97">6、森林</a></li>
+<li><a href="#7-%E6%A0%91%E7%9A%84%E8%A1%A8%E7%A4%BA%E6%96%B9%E6%B3%95">7、树的表示方法</a></li>
+<li><a href="#8-%E6%80%BB%E7%BB%93">8、总结</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/ioc-zhi-spring-tong-yi-zi-yuan-jia-zai">
+              <h3 class="post-title">
+                IoC之Spring统一资源加载
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>
