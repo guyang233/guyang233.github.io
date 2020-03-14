@@ -1,0 +1,403 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IoC之获取验证模型 | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1584173375930">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="IoC之获取验证模型 | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="
+IoC加载定义核心方法是#doLoadDocument方法中主要做三件事
+
+1、调用#getValidationModeForResource方法，获取指定资源（xml）的验证模式
+2、调用DocumentLoader#loadDocum..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1584173375930" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              IoC之获取验证模型
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-03-09
+              </span>
+              <span>
+                7 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <ul>
+<li>IoC加载定义核心方法是#doLoadDocument方法中主要做三件事
+<ul>
+<li>1、调用#getValidationModeForResource方法，获取指定资源（xml）的验证模式</li>
+<li>2、调用DocumentLoader#loadDocument方法，获取XML Document实例</li>
+<li>3、调用#registerBeanDefinitions方法，根据获取的文档实例，注册Bean信息</li>
+<li>4、主要是分析第一步，获取XML文件的验证模式。为什么要获取验证模式呢？原因主要是：XML文件的验证模式保证了XML文件的正确性</li>
+</ul>
+</li>
+</ul>
+<h4 id="1-dtd与xsd的区别">1、 DTD与XSD的区别</h4>
+<ul>
+<li>1、DTD
+<ul>
+<li>DTD（文档类型定义），即文档类型定义，为XML文件的验证机制，属于XML文件中组成的部分。DTD是一种保证XML文档格式正确的有效验证方式，它定义了相关XML文档的元素，实际上DTD就相当于XML中的“词汇”和“语法”，我们可以通过比较XML文件和DTD文件来看文档是否符合规范，元素和标签。使用是否正确</li>
+<li>要在Spring中使用DTD，需要在Spring XML文件标题中声明</li>
+</ul>
+</li>
+</ul>
+<pre><code>&lt;？xml version =“ 1.0” encoding =“ UTF-8”？&gt; 
+&lt;！DOCTYPE bean PUBLIC“-// SPRING // DTD BEAN // EN”“ http://www.springframework.org/dtd/spring- beans.dtd“&gt;
+</code></pre>
+<pre><code>-  DTD在一定阶段推动了XML得发展，本身存在着一些缺陷
+    - 1、没有使用XML格式，而是自己定义的一套格式，相对解析器的重用性较差；而且DTD的内置和访问没有标准的编程接口，因此解析器很难简单的解析DTD文档
+    - 2、DTD对元素的类型限制上限；同时其他的约束力也较弱
+    - 3、DTD扩展能力较差
+    - 4、基于正则表达式的DTD文档的描述能力有限
+</code></pre>
+<ul>
+<li>2、XSD
+<ul>
+<li>针对DTD的缺陷，W3C在2001年推出XSD。XSD（XML模式定义）即XML模式语言。XML模式本身就是一个XML文档，使用的就是XML语法，因此可以很方便的解析XSD文档。相对于DTD，XSD具有如下优势
+<ul>
+<li>1、XML模式基于XML，没有专门的语法</li>
+<li>2、XML架构可以像其他XML文件一样的解析和处理</li>
+<li>3、XML Schema比DTD提供了丰富的数据模型</li>
+<li>4、XML模式提供可扩展的数据模型</li>
+<li>5、XML Schema支持综合命名空间</li>
+<li>6、XML模式支持属性组</li>
+<li></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="2-getvalidationmodeforresource">2、 getValidationModeForResource</h4>
+<pre><code>	/**
+	 * Indicates that the validation should be disabled.
+	 */
+	//禁用验证模式
+	public static final int VALIDATION_NONE = XmlValidationModeDetector.VALIDATION_NONE;
+
+	/**
+	 * Indicates that the validation mode should be detected automatically.
+	 */
+	//自动校验模式
+	public static final int VALIDATION_AUTO = XmlValidationModeDetector.VALIDATION_AUTO;
+
+	/**
+	 * Indicates that DTD validation should be used.
+	 */
+	//DTD校验模式
+	public static final int VALIDATION_DTD = XmlValidationModeDetector.VALIDATION_DTD;
+
+	/**
+	 * Indicates that XSD validation should be used.
+	 */
+	//XSD验证模式
+	public static final int VALIDATION_XSD = XmlValidationModeDetector.VALIDATION_XSD;
+
+	/**
+	 * 验证模式。默认为自动模式
+	 */
+	private int validationMode = VALIDATION_AUTO;
+
+    protected int getValidationModeForResource(Resource resource) {
+		//&lt;1&gt;、获取指定的验证模式
+		int validationModeToUse = getValidationMode();
+		//首先，如果手动指定，则直接返回
+		if (validationModeToUse != VALIDATION_AUTO) {
+			return validationModeToUse;
+		}
+		//&lt;2&gt;、 其次，自动获取验证模式
+		int detectedMode = detectValidationMode(resource);
+		if (detectedMode != VALIDATION_AUTO) {
+			return detectedMode;
+		}
+		// 最后，使用 VALIDATION_XSD 做为默认
+		// Hmm, we didn't get a clear indication... Let's assume XSD,
+		// since apparently no DTD declaration has been found up until
+		// detection stopped (before finding the document's root tag).
+		return VALIDATION_XSD;
+	}
+</code></pre>
+<ul>
+<li>在&lt;1&gt;处，调用#getValidationMode方法，获取指定的验证模式。如果没有手动指定，则直接返回。另外，对于属性的设置和获得的代码。代码如下：</li>
+</ul>
+<pre><code>public void setValidationMode(int validationMode) {
+	this.validationMode = validationMode;
+}
+
+public int getValidationMode() {
+	return this.validationMode;
+}
+</code></pre>
+<ul>
+<li>&lt;2&gt;处，调用#detectValidationMode方法，自动获取验证模式</li>
+</ul>
+<pre><code>//XML 验证模式探测器
+private final XmlValidationModeDetector validationModeDetector = new XmlValidationModeDetector();
+
+protected int detectValidationMode(Resource resource) {
+		//不可读，抛出异常
+		if (resource.isOpen()) {
+			throw new BeanDefinitionStoreException(
+					&quot;Passed-in Resource [&quot; + resource + &quot;] contains an open stream: &quot; +
+					&quot;cannot determine validation mode automatically. Either pass in a Resource &quot; +
+					&quot;that is able to create fresh streams, or explicitly specify the validationMode &quot; +
+					&quot;on your XmlBeanDefinitionReader instance.&quot;);
+		}
+		//打开InputStream流
+		InputStream inputStream;
+		try {
+			inputStream = resource.getInputStream();
+		}
+		catch (IOException ex) {
+			throw new BeanDefinitionStoreException(
+					&quot;Unable to determine validation mode for [&quot; + resource + &quot;]: cannot open InputStream. &quot; +
+					&quot;Did you attempt to load directly from a SAX InputSource without specifying the &quot; +
+					&quot;validationMode on your XmlBeanDefinitionReader instance?&quot;, ex);
+		}
+
+		try {
+			//&lt;X&gt;获取相应的验证模式
+			return this.validationModeDetector.detectValidationMode(inputStream);
+		}
+		catch (IOException ex) {
+			throw new BeanDefinitionStoreException(&quot;Unable to determine validation mode for [&quot; +
+					resource + &quot;]: an error occurred whilst reading from the InputStream.&quot;, ex);
+		}
+	}
+</code></pre>
+<pre><code>- 核心在于&lt;X&gt;处，调用XmlValidationModeDetector#detectValidationMode方法，获取相应的验证模式。
+</code></pre>
+<ul>
+<li>最后使用VALIDATION_XSD 作为默认</li>
+</ul>
+<h4 id="3-xmlvalidationmodedetector">3、XmlValidationModeDetector</h4>
+<ul>
+<li>XmlValidationModeDetector，XML验证器模式探测器</li>
+</ul>
+<pre><code>public int detectValidationMode(InputStream inputStream) throws IOException {
+		// Peek into the file to look for DOCTYPE.
+		BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+		try {
+			//是否为DTD校验模式，默认为非DTD模式，即XSD模式
+			boolean isDtdValidated = false;
+			String content;
+			// &lt;0&gt; 循环，逐行读取 XML 文件的内容
+			while ((content = reader.readLine()) != null) {
+				content = consumeCommentTokens(content);
+				// 跳过，如果是注释，或者
+				if (this.inComment || !StringUtils.hasText(content)) {
+					continue;
+				}
+				// &lt;1&gt; 包含 DOCTYPE 为 DTD 模式
+				if (hasDoctype(content)) {
+					isDtdValidated = true;
+					break;
+				}
+				// &lt;2&gt;  hasOpeningTag 方法会校验，如果这一行有 &lt; ，并且 &lt; 后面跟着的是字母，则返回 true 。
+				if (hasOpeningTag(content)) {
+					// End of meaningful data...
+					break;
+				}
+			}
+			// 返回 VALIDATION_DTD or VALIDATION_XSD 模式
+			return (isDtdValidated ? VALIDATION_DTD : VALIDATION_XSD);
+		}
+		catch (CharConversionException ex) {
+			// &lt;3&gt; 返回 VALIDATION_AUTO 模式
+			// Choked on some character encoding...
+			// Leave the decision up to the caller.
+			return VALIDATION_AUTO;
+		}
+		finally {
+			reader.close();
+		}
+	}
+</code></pre>
+<ul>
+<li>&lt;0&gt;处，从代码看，主要是通过读取XML文件的内容，来自动判断</li>
+<li>&lt;1&gt;处，调用#hasDoctype方法，判断内容中如果包含有“DOCTYPE”，则为DTD验证模式。</li>
+</ul>
+<pre><code>	private static final String DOCTYPE = &quot;DOCTYPE&quot;;
+
+	/**
+	 * Does the content contain the DTD DOCTYPE declaration?
+	 */
+	private boolean hasDoctype(String content) {
+		return content.contains(DOCTYPE);
+	}
+</code></pre>
+<ul>
+<li>&lt;2&gt;处，调用#hasOpeningTag方法，判断如果这一行包含&lt;,并且&lt;紧跟着的是字母，则为XSD验证模式</li>
+</ul>
+<pre><code>	private boolean hasOpeningTag(String content) {
+		if (this.inComment) {
+			return false;
+		}
+		int openTagIndex = content.indexOf('&lt;');// &lt;存在
+		return (openTagIndex &gt; -1 &amp;&amp; (content.length() &gt; openTagIndex + 1) &amp;&amp; // &lt; 后面还有内容
+				Character.isLetter(content.charAt(openTagIndex + 1))); // &lt; 后面的内容是字母
+	}
+</code></pre>
+<ul>
+<li>&lt;3&gt;处，如果发生CharConversionException异常，则为VALIDATION_AUTO模式</li>
+</ul>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1-dtd%E4%B8%8Exsd%E7%9A%84%E5%8C%BA%E5%88%AB">1、 DTD与XSD的区别</a></li>
+<li><a href="#2-getvalidationmodeforresource">2、 getValidationModeForResource</a></li>
+<li><a href="#3-xmlvalidationmodedetector">3、XmlValidationModeDetector</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/ioc-zhi-jia-zai-beandefinition">
+              <h3 class="post-title">
+                IoC之加载BeanDefinition
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

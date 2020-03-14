@@ -1,0 +1,706 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IoC 之获取 Document 对象 | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1584173375930">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="IoC 之获取 Document 对象 | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="获取Document实例
+1、 DocumentLoader
+
+定义从资源文件加载到转换为Document的功能
+
+InputSource，加载Document的resource资源
+EntityResolver， 解析文件的解析器
+Err..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1584173375930" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              IoC 之获取 Document 对象
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-03-09
+              </span>
+              <span>
+                14 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <h3 id="获取document实例">获取Document实例</h3>
+<h4 id="1-documentloader">1、 DocumentLoader</h4>
+<ul>
+<li>定义从资源文件加载到转换为Document的功能
+<ul>
+<li>InputSource，加载Document的resource资源</li>
+<li>EntityResolver， 解析文件的解析器</li>
+<li>ErrorHandler， 处理加载Document对象的过程中的异常</li>
+<li>validationMode， 校验模式</li>
+<li>namespaceAware，命名空间，如果需要提供支持对XML名称空间的支持，则需要值为true</li>
+</ul>
+</li>
+</ul>
+<pre><code>public interface DocumentLoader {
+
+	/**
+	 * Load a {@link Document document} from the supplied {@link InputSource source}.
+	 * @param inputSource the source of the document that is to be loaded
+	 * @param entityResolver the resolver that is to be used to resolve any entities
+	 * @param errorHandler used to report any errors during document loading
+	 * @param validationMode the type of validation
+	 * {@link org.springframework.util.xml.XmlValidationModeDetector#VALIDATION_DTD DTD}
+	 * or {@link org.springframework.util.xml.XmlValidationModeDetector#VALIDATION_XSD XSD})
+	 * @param namespaceAware {@code true} if support for XML namespaces is to be provided
+	 * @return the loaded {@link Document document}
+	 * @throws Exception if an error occurs
+	 */
+	Document loadDocument(
+			InputSource inputSource, EntityResolver entityResolver,
+			ErrorHandler errorHandler, int validationMode, boolean namespaceAware)
+			throws Exception;
+
+}1
+</code></pre>
+<h5 id="1-1-defaultdocumentloader">1、1 DefaultDocumentLoader</h5>
+<ul>
+<li>#loadDocument由DefaultDocumentLoader实现</li>
+</ul>
+<pre><code>//&lt;1&gt; 创建 DocumentBuilderFactory
+		DocumentBuilderFactory factory = createDocumentBuilderFactory(validationMode, namespaceAware);
+		if (logger.isTraceEnabled()) {
+			logger.trace(&quot;Using JAXP provider [&quot; + factory.getClass().getName() + &quot;]&quot;);
+		}
+		// &lt;2&gt; 创建 DocumentBuilder
+		DocumentBuilder builder = createDocumentBuilder(factory, entityResolver, errorHandler);
+		// &lt;3&gt; 解析 XML InputSource 返回 Document 对象
+		return builder.parse(inputSource);
+</code></pre>
+<ul>
+<li>首先调用#createDocumentBuilderFactory来创建DocumentBuilderFactory对象</li>
+</ul>
+<pre><code>protected DocumentBuilderFactory createDocumentBuilderFactory(int validationMode, boolean namespaceAware)
+			throws ParserConfigurationException {
+		// 创建 DocumentBuilderFactor
+		DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+		//设置命名空间支持
+		factory.setNamespaceAware(namespaceAware);
+		//判断是否校验禁用
+		if (validationMode != XmlValidationModeDetector.VALIDATION_NONE) {
+			//开启校验
+			factory.setValidating(true);
+			//判断是不是XSD模式
+			if (validationMode == XmlValidationModeDetector.VALIDATION_XSD) {
+				// Enforce namespace aware for XSD...
+				//XSD模式下。强制将名称空间感知为XSD
+				factory.setNamespaceAware(true);
+				try {
+					factory.setAttribute(SCHEMA_LANGUAGE_ATTRIBUTE, XSD_SCHEMA_LANGUAGE);
+				}
+				catch (IllegalArgumentException ex) {
+					ParserConfigurationException pcex = new ParserConfigurationException(
+							&quot;Unable to validate using XSD: Your JAXP provider [&quot; + factory +
+							&quot;] does not support XML Schema. Are you running on Java 1.4 with Apache Crimson? &quot; +
+							&quot;Upgrade to Apache Xerces (or Java 1.5) for full XSD support.&quot;);
+					pcex.initCause(ex);
+					throw pcex;
+				}
+			}
+		}
+
+		return factory;
+	}
+</code></pre>
+<ul>
+<li>然后调用#createDocumentBuilder方法来创建DocumentBuilder对象</li>
+</ul>
+<pre><code>    	protected DocumentBuilder createDocumentBuilder(DocumentBuilderFactory factory,
+			@Nullable EntityResolver entityResolver, @Nullable ErrorHandler errorHandler)
+			throws ParserConfigurationException {
+		//创建DocumentBuilder对象
+		DocumentBuilder docBuilder = factory.newDocumentBuilder();
+		if (entityResolver != null) {
+			//设置entityResolver属性
+			docBuilder.setEntityResolver(entityResolver);
+		}
+		if (errorHandler != null) {
+			//设置errorHandler属性
+			docBuilder.setErrorHandler(errorHandler);
+		}
+		return docBuilder;
+	}
+</code></pre>
+<ul>
+<li>最后调用DocumentBuilder#parse 返回Document对象</li>
+</ul>
+<h4 id="2-entityresolver">2、EntityResolver</h4>
+<ul>
+<li>XmlBeanDefinitionReader#getEntityResolver方法获取的EntityResolver，返回指定的解析器，如果没有指定，则构造一个未指定的默认解析器</li>
+</ul>
+<pre><code>	protected EntityResolver getEntityResolver() {
+		if (this.entityResolver == null) {
+			// Determine default EntityResolver to use.
+			ResourceLoader resourceLoader = getResourceLoader();
+			if (resourceLoader != null) {
+				this.entityResolver = new ResourceEntityResolver(resourceLoader);
+			}
+			else {
+				this.entityResolver = new DelegatingEntityResolver(getBeanClassLoader());
+			}
+		}
+		return this.entityResolver;
+	}
+
+</code></pre>
+<pre><code>- resourceLoader不为null，根据ResourLoader创建一个ResourceEntityResolver
+- resourceLoader为null，创建一个DelegatingEntityResolver对象，默认委托给BeansDtdResolver和PluggableSchemaResolver
+</code></pre>
+<h5 id="2-1-entityresolver的子类">2、1  EntityResolver的子类</h5>
+<ul>
+<li>BeansDtdResolver ，EntityResolver接口的实现，Spring beans DTD的解析器，用来从classpath或jar文件中加载dtd。</li>
+</ul>
+<pre><code>    private static final String DTD_EXTENSION = &quot;.dtd&quot;;
+
+    private static final String DTD_NAME = &quot;spring-beans&quot;;
+
+</code></pre>
+<ul>
+<li>PluggableSchemaResolver, Entity接口的实现，读取classpath下所有匹配&quot;META-INF/spring.schemas&quot;成一个schema URL 和chema path对应的map</li>
+</ul>
+<pre><code>    /**
+        * The location of the file that defines schema mappings.
+        * Can be present in multiple JAR files.
+	*/
+	public static final String DEFAULT_SCHEMA_MAPPINGS_LOCATION = &quot;META-INF/spring.schemas&quot;;
+
+
+	private static final Log logger = LogFactory.getLog(PluggableSchemaResolver.class);
+
+	@Nullable
+	private final ClassLoader classLoader;
+
+	//schema文件地址
+	private final String schemaMappingsLocation;
+
+	/** Stores the mapping of schema URL -&gt; local schema path. */
+	@Nullable
+	private volatile Map&lt;String, String&gt; schemaMappings;
+</code></pre>
+<ul>
+<li>DelegatingEntityResolver，实现EntityResolver接口，分别代理dtd的BeansDtdResolver和xml schemas的PluggableSchemaResolver</li>
+</ul>
+<pre><code>	/** Suffix for DTD files. */
+	public static final String DTD_SUFFIX = &quot;.dtd&quot;;
+
+	/** Suffix for schema definition files. */
+	public static final String XSD_SUFFIX = &quot;.xsd&quot;;
+
+
+	private final EntityResolver dtdResolver;
+
+	private final EntityResolver schemaResolver;
+
+    //默认
+    public DelegatingEntityResolver(@Nullable ClassLoader classLoader) {
+		this.dtdResolver = new BeansDtdResolver();
+		this.schemaResolver = new PluggableSchemaResolver(classLoader);
+	}
+
+    //自定义
+    public DelegatingEntityResolver(EntityResolver dtdResolver, EntityResolver schemaResolver) {
+		Assert.notNull(dtdResolver, &quot;'dtdResolver' is required&quot;);
+		Assert.notNull(schemaResolver, &quot;'schemaResolver' is required&quot;);
+		this.dtdResolver = dtdResolver;
+		this.schemaResolver = schemaResolver;
+	}
+</code></pre>
+<ul>
+<li>ResourceEntityResolver，继承DelegatingEntityResolver，通过resourceLoader来解析实体的引用</li>
+</ul>
+<pre><code>private final ResourceLoader resourceLoader;
+
+public ResourceEntityResolver(ResourceLoader resourceLoader) {
+	super(resourceLoader.getClassLoader());
+	this.resourceLoader = resourceLoader;
+}
+</code></pre>
+<h5 id="2-2-作用">2、2 作用</h5>
+<ul>
+<li>EntityResolver 的作用就是，通过实现它，应用可以自定义如何寻找【验证文件】的逻辑。</li>
+<li>在loadDocument方法中涉及一个参数EntityResolver，何为EntityResolver？官网这样解释：如果SAX应用程序需要实现自定义处理外部文件实体，则必须实现此接口并使用setEntityResolver方法向SAX驱动器注册一个实例。也就是说，对于解析一个XML，SAX首先读取该XML文档上的说明，根据声明去寻找对应的DTD定义，一遍对一个文档进行一个验证。默认的寻找规则，则通过网络（实现上就是声明的DTD的URI地址）来下载对应的DTD声明。并进行认证。下载的过程是一个漫长的过程，而且网络中断或者不可用时，这里会报错，就是因为相应的DTD声明没有被找到的原因。EntityResolver的作用是项目本身就可以提供一个如何寻找DTD声明的方法，即由程序寻找DTD声明的过程，在实现时直接将此文档读取并返回给SAX即可。这样就避免了通过网络来寻找相应的声明</li>
+</ul>
+<pre><code>public interface EntityResolver {
+
+
+    /**
+     * Allow the application to resolve external entities.
+     *
+     * &lt;p&gt;The parser will call this method before opening any external
+     * entity except the top-level document entity.  Such entities include
+     * the external DTD subset and external parameter entities referenced
+     * within the DTD (in either case, only if the parser reads external
+     * parameter entities), and external general entities referenced
+     * within the document element (if the parser reads external general
+     * entities).  The application may request that the parser locate
+     * the entity itself, that it use an alternative URI, or that it
+     * use data provided by the application (as a character or byte
+     * input stream).&lt;/p&gt;
+     *
+     * &lt;p&gt;Application writers can use this method to redirect external
+     * system identifiers to secure and/or local URIs, to look up
+     * public identifiers in a catalogue, or to read an entity from a
+     * database or other input source (including, for example, a dialog
+     * box).  Neither XML nor SAX specifies a preferred policy for using
+     * public or system IDs to resolve resources.  However, SAX specifies
+     * how to interpret any InputSource returned by this method, and that
+     * if none is returned, then the system ID will be dereferenced as
+     * a URL.  &lt;/p&gt;
+     *
+     * &lt;p&gt;If the system identifier is a URL, the SAX parser must
+     * resolve it fully before reporting it to the application.&lt;/p&gt;
+     *
+     * @param publicId The public identifier of the external entity
+     *        being referenced, or null if none was supplied.
+     * @param systemId The system identifier of the external entity
+     *        being referenced.
+     * @return An InputSource object describing the new input source,
+     *         or null to request that the parser open a regular
+     *         URI connection to the system identifier.
+     * @exception org.xml.sax.SAXException Any SAX exception, possibly
+     *            wrapping another exception.
+     * @exception java.io.IOException A Java-specific IO exception,
+     *            possibly the result of creating a new InputStream
+     *            or Reader for the InputSource.
+     * @see org.xml.sax.InputSource
+     */
+    public abstract InputSource resolveEntity (String publicId,
+                                               String systemId)
+        throws SAXException, IOException;
+
+}
+</code></pre>
+<ul>
+<li>
+<p>接口方法接受两个参数publicId和systemId，并且返回InputSource对象。两个参数声明如下：</p>
+<ul>
+<li>publicId：被引用的外部实体的公共标识符，如果没有提供，则返回null</li>
+<li>systemId：被引用的外部实体的系统不是福</li>
+</ul>
+</li>
+<li>
+<p>这两个参数的实际内容和具体的验证模式的关系如下</p>
+<ul>
+<li>
+<p>XSD验证模式</p>
+<ul>
+<li>publicId：null</li>
+<li>systemId：http://www.springframework.org/schema/beans/spring-beans.xsd</li>
+</ul>
+</li>
+<li>
+<p>DTD验证模式</p>
+<ul>
+<li>publicId：-//SPRING//DTD BEAN 2.0//EN</li>
+<li>systemId：http://www.springframework.org/dtd/spring-beans.dtd</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h5 id="2-3-delegatingentityresolver">2、3 DelegatingEntityResolver</h5>
+<ul>
+<li>Spring中使用DelegatingEntityResolver为EntityResolver的实现类
+<ul>
+<li>如果是DTD验证模式，使用BeansDtdResolver来进行解析</li>
+<li>如果是XSD验证模式，使用PluggableSchemaResolver来进行解析</li>
+</ul>
+</li>
+</ul>
+<pre><code>	@Override
+	@Nullable
+	public InputSource resolveEntity(@Nullable String publicId, @Nullable String systemId)
+			throws SAXException, IOException {
+		//DTD验证模式
+		if (systemId != null) {
+			if (systemId.endsWith(DTD_SUFFIX)) {
+				return this.dtdResolver.resolveEntity(publicId, systemId);
+			}
+			//XSD验证模式
+			else if (systemId.endsWith(XSD_SUFFIX)) {
+				return this.schemaResolver.resolveEntity(publicId, systemId);
+			}
+		}
+
+		// Fall back to the parser's default behavior.
+		return null;
+	}
+</code></pre>
+<h5 id="2-4-beansdtdresolver">2、 4 BeansDtdResolver</h5>
+<pre><code>
+	@Override
+	@Nullable
+	public InputSource resolveEntity(@Nullable String publicId, @Nullable String systemId) throws IOException {
+		if (logger.isTraceEnabled()) {
+			logger.trace(&quot;Trying to resolve XML entity with public ID [&quot; + publicId +
+					&quot;] and system ID [&quot; + systemId + &quot;]&quot;);
+		}
+		//必须是DTD结尾
+		if (systemId != null &amp;&amp; systemId.endsWith(DTD_EXTENSION)) {
+			//获取最后一个“/”的位置
+			int lastPathSeparator = systemId.lastIndexOf('/');
+			//获取spring-beans的位置
+			int dtdNameStart = systemId.indexOf(DTD_NAME, lastPathSeparator);
+			if (dtdNameStart != -1) {//找到
+				String dtdFile = DTD_NAME + DTD_EXTENSION;
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Trying to locate [&quot; + dtdFile + &quot;] in Spring jar on classpath&quot;);
+				}
+				try {
+					//创建ClassPathResource
+					Resource resource = new ClassPathResource(dtdFile, getClass());
+					//创建InputSource对象，兵器设置publicId， systemId
+					InputSource source = new InputSource(resource.getInputStream());
+					source.setPublicId(publicId);
+					source.setSystemId(systemId);
+					if (logger.isTraceEnabled()) {
+						logger.trace(&quot;Found beans DTD [&quot; + systemId + &quot;] in classpath: &quot; + dtdFile);
+					}
+					return source;
+				}
+				catch (FileNotFoundException ex) {
+					if (logger.isDebugEnabled()) {
+						logger.debug(&quot;Could not resolve beans DTD [&quot; + systemId + &quot;]: not found in classpath&quot;, ex);
+					}
+				}
+			}
+		}
+		//使用默认的行为，从网络上下载
+		// Fall back to the parser's default behavior.
+		return null;
+	}
+</code></pre>
+<ul>
+<li>BeansDtdResolver解析DTD的过程，只是对systemId进行了简单的校验，然后构造InputSource对象，设置publicId和systemId</li>
+</ul>
+<h5 id="2-5-pluggableschemaresolver">2、 5 PluggableSchemaResolver</h5>
+<pre><code>@Override
+	@Nullable
+	public InputSource resolveEntity(@Nullable String publicId, @Nullable String systemId) throws IOException {
+		if (logger.isTraceEnabled()) {
+			logger.trace(&quot;Trying to resolve XML entity with public id [&quot; + publicId +
+					&quot;] and system id [&quot; + systemId + &quot;]&quot;);
+		}
+
+		if (systemId != null) {
+			//获取Resource 所在的位置
+			String resourceLocation = getSchemaMappings().get(systemId);
+			if (resourceLocation == null &amp;&amp; systemId.startsWith(&quot;https:&quot;)) {
+				// Retrieve canonical http schema mapping even for https declaration
+				resourceLocation = getSchemaMappings().get(&quot;http:&quot; + systemId.substring(6));
+			}
+			if (resourceLocation != null) {
+				//创建ClassPathResource对象
+				Resource resource = new ClassPathResource(resourceLocation, this.classLoader);
+				try {
+					//创建InputSource对象。设置publicId和systemId
+					InputSource source = new InputSource(resource.getInputStream());
+					source.setPublicId(publicId);
+					source.setSystemId(systemId);
+					if (logger.isTraceEnabled()) {
+						logger.trace(&quot;Found XML schema [&quot; + systemId + &quot;] in classpath: &quot; + resourceLocation);
+					}
+					return source;
+				}
+				catch (FileNotFoundException ex) {
+					if (logger.isDebugEnabled()) {
+						logger.debug(&quot;Could not find XML schema [&quot; + systemId + &quot;]: &quot; + resource, ex);
+					}
+				}
+			}
+		}
+
+		// Fall back to the parser's default behavior.
+		return null;
+	}
+</code></pre>
+<ul>
+<li>首先调用getSchemaMappings().get(systemId)，获取映射表来获取资源的位置</li>
+</ul>
+<pre><code>	/**
+	 * Load the specified schema mappings lazily.
+	 */
+	private Map&lt;String, String&gt; getSchemaMappings() {
+		Map&lt;String, String&gt; schemaMappings = this.schemaMappings;
+		//双重检查锁，实现schemaMappings的单例
+		if (schemaMappings == null) {
+			synchronized (this) {
+				schemaMappings = this.schemaMappings;
+				if (schemaMappings == null) {
+					if (logger.isTraceEnabled()) {
+						logger.trace(&quot;Loading schema mappings from [&quot; + this.schemaMappingsLocation + &quot;]&quot;);
+					}
+					try {
+						// 以 Properties 的方式，读取 schemaMappingsLocation
+						Properties mappings =
+								PropertiesLoaderUtils.loadAllProperties(this.schemaMappingsLocation, this.classLoader);
+						if (logger.isTraceEnabled()) {
+							logger.trace(&quot;Loaded schema mappings: &quot; + mappings);
+						}
+						//将mappings初始化到schemaMappings
+						schemaMappings = new ConcurrentHashMap&lt;&gt;(mappings.size());
+						CollectionUtils.mergePropertiesIntoMap(mappings, schemaMappings);
+						this.schemaMappings = schemaMappings;
+					}
+					catch (IOException ex) {
+						throw new IllegalStateException(
+								&quot;Unable to load schema mappings from location [&quot; + this.schemaMappingsLocation + &quot;]&quot;, ex);
+					}
+				}
+			}
+		}
+		return schemaMappings;
+	}
+</code></pre>
+<ul>
+<li>部分映射表<br>
+<img src="https://guyang233.github.io/post-images/1584172944557.png" alt="" loading="lazy"></li>
+<li>然后根据传入的systemId来获取映射表对应文件的位置</li>
+<li>最后根据resourceLocation来构造InputSource对象，设置publicId和systemId</li>
+</ul>
+<h5 id="2-6-resourceentityresolver">2、 6 ResourceEntityResolver</h5>
+<pre><code>@Override
+	@Nullable
+	public InputSource resolveEntity(@Nullable String publicId, @Nullable String systemId)
+			throws SAXException, IOException {
+		//调用父类的方法
+		InputSource source = super.resolveEntity(publicId, systemId);
+		//解析失败，使用resourceLoader来解析。通过对systemId的解码操作来获取文件资源的位置，通过resourceLoader来获取Resource对应，设置publicId和systemId
+		if (source == null &amp;&amp; systemId != null) {
+			String resourcePath = null;
+			try {
+				String decodedSystemId = URLDecoder.decode(systemId, &quot;UTF-8&quot;);
+				String givenUrl = new URL(decodedSystemId).toString();
+				String systemRootUrl = new File(&quot;&quot;).toURI().toURL().toString();
+				// Try relative to resource base if currently in system root.
+				if (givenUrl.startsWith(systemRootUrl)) {
+					resourcePath = givenUrl.substring(systemRootUrl.length());
+				}
+			}
+			catch (Exception ex) {
+				// Typically a MalformedURLException or AccessControlException.
+				if (logger.isDebugEnabled()) {
+					logger.debug(&quot;Could not resolve XML entity [&quot; + systemId + &quot;] against system root URL&quot;, ex);
+				}
+				// No URL (or no resolvable URL) -&gt; try relative to resource base.
+				resourcePath = systemId;
+			}
+			if (resourcePath != null) {
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Trying to locate XML entity [&quot; + systemId + &quot;] as resource [&quot; + resourcePath + &quot;]&quot;);
+				}
+				Resource resource = this.resourceLoader.getResource(resourcePath);
+				source = new InputSource(resource.getInputStream());
+				source.setPublicId(publicId);
+				source.setSystemId(systemId);
+				if (logger.isDebugEnabled()) {
+					logger.debug(&quot;Found XML entity [&quot; + systemId + &quot;]: &quot; + resource);
+				}
+			}
+			else if (systemId.endsWith(DTD_SUFFIX) || systemId.endsWith(XSD_SUFFIX)) {
+				// External dtd/xsd lookup via https even for canonical http declaration
+				String url = systemId;
+				if (url.startsWith(&quot;http:&quot;)) {
+					url = &quot;https:&quot; + url.substring(5);
+				}
+				try {
+					source = new InputSource(new URL(url).openStream());
+					source.setPublicId(publicId);
+					source.setSystemId(systemId);
+				}
+				catch (IOException ex) {
+					if (logger.isDebugEnabled()) {
+						logger.debug(&quot;Could not resolve XML entity [&quot; + systemId + &quot;] through URL [&quot; + url + &quot;]&quot;, ex);
+					}
+					// Fall back to the parser's default behavior.
+					source = null;
+				}
+			}
+		}
+
+		return source;
+	}
+</code></pre>
+<ul>
+<li>首先调用父类的方法来解析</li>
+<li>如果父类解析失败，则使用ResourceLoader来对systemId对应的Resouce进行读取</li>
+</ul>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#%E8%8E%B7%E5%8F%96document%E5%AE%9E%E4%BE%8B">获取Document实例</a>
+<ul>
+<li><a href="#1-documentloader">1、 DocumentLoader</a>
+<ul>
+<li><a href="#1-1-defaultdocumentloader">1、1 DefaultDocumentLoader</a></li>
+</ul>
+</li>
+<li><a href="#2-entityresolver">2、EntityResolver</a>
+<ul>
+<li><a href="#2-1-entityresolver%E7%9A%84%E5%AD%90%E7%B1%BB">2、1  EntityResolver的子类</a></li>
+<li><a href="#2-2-%E4%BD%9C%E7%94%A8">2、2 作用</a></li>
+<li><a href="#2-3-delegatingentityresolver">2、3 DelegatingEntityResolver</a></li>
+<li><a href="#2-4-beansdtdresolver">2、 4 BeansDtdResolver</a></li>
+<li><a href="#2-5-pluggableschemaresolver">2、 5 PluggableSchemaResolver</a></li>
+<li><a href="#2-6-resourceentityresolver">2、 6 ResourceEntityResolver</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/ioc-zhi-huo-qu-yan-zheng-mo-xing">
+              <h3 class="post-title">
+                IoC之获取验证模型
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>
