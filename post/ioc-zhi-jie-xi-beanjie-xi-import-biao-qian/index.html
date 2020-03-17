@@ -1,0 +1,449 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IoC 之解析 Bean：解析 import 标签 | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1584454904384">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="IoC 之解析 Bean：解析 import 标签 | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="
+根节点或者子节点采用默认的命名空间的话，采用#parseDefaultElement解析
+如果没有采用默认空间命名的话，采用#parseCustomElement解析
+默认解析的代码如下：
+
+public static final Str..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1584454904384" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              IoC 之解析 Bean：解析 import 标签
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-03-16
+              </span>
+              <span>
+                8 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <ul>
+<li>根节点或者子节点采用默认的命名空间的话，采用#parseDefaultElement解析</li>
+<li>如果没有采用默认空间命名的话，采用#parseCustomElement解析</li>
+<li>默认解析的代码如下：</li>
+</ul>
+<pre><code>public static final String IMPORT_ELEMENT = &quot;import&quot;;
+
+public static final String ALIAS_ELEMENT = &quot;alias&quot;;
+
+public static final String BEAN_ELEMENT = BeanDefinitionParserDelegate.BEAN_ELEMENT;
+
+public static final String BEAN_ELEMENT = &quot;bean&quot;;
+
+public static final String NESTED_BEANS_ELEMENT = &quot;beans&quot;;
+
+private void parseDefaultElement(Element ele, BeanDefinitionParserDelegate delegate) {
+		//解析默认标签import
+		if (delegate.nodeNameEquals(ele, IMPORT_ELEMENT)) {
+			importBeanDefinitionResource(ele);
+		}
+		//解析默认标签alias
+		else if (delegate.nodeNameEquals(ele, ALIAS_ELEMENT)) {
+			processAliasRegistration(ele);
+		}
+		//解析默认标签bean
+		else if (delegate.nodeNameEquals(ele, BEAN_ELEMENT)) {
+			processBeanDefinition(ele, delegate);
+		}
+		//解析默认标签beans
+		else if (delegate.nodeNameEquals(ele, NESTED_BEANS_ELEMENT)) {
+			// recurse
+			doRegisterBeanDefinitions(ele);
+		}
+	}
+</code></pre>
+<h4 id="1-import示例">1、 import示例</h4>
+<ul>
+<li>避免过多的配置文件，Spring提供import配置文件的方式</li>
+</ul>
+<pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;beans xmlns=&quot;http://www.springframework.org/schema/beans&quot;
+       xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+       xsi:schemaLocation=&quot;http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd&quot;&gt;
+
+    &lt;import resource=&quot;spring-student.xml&quot;/&gt;
+
+    &lt;import resource=&quot;spring-student-dtd.xml&quot;/&gt;
+
+&lt;/beans&gt;
+</code></pre>
+<ul>
+<li>spring.xml配置文件中，使用import标签的方式导入其他模块的配置文件，简化了配置文件维护的复杂度，便于管理
+<ul>
+<li>如果有配置需要修改直接修改对应的配置文件即可</li>
+<li>若有新的配置文件需要被引入的话，直接添加import引入即可</li>
+</ul>
+</li>
+</ul>
+<h4 id="2-importbeandefinitionresource">2、 importBeanDefinitionResource</h4>
+<ul>
+<li>Spring调用#importBeanDefinitionResource方法来对import标签进行解析</li>
+</ul>
+<pre><code>/**
+	 * Parse an &quot;import&quot; element and load the bean definitions
+	 * from the given resource into the bean factory.
+	 */
+	protected void importBeanDefinitionResource(Element ele) {
+		//获取Resource 的值
+		String location = ele.getAttribute(RESOURCE_ATTRIBUTE);
+		//为空，直接退出
+		if (!StringUtils.hasText(location)) {
+			getReaderContext().error(&quot;Resource location must not be empty&quot;, ele);
+			return;
+		}
+		//解析系统属性，格式如:&quot;${user.dir}&quot;
+		// Resolve system properties: e.g. &quot;${user.dir}&quot;
+		location = getReaderContext().getEnvironment().resolveRequiredPlaceholders(location);
+		//实际Resource的集合，即import的地址，有哪些Resource资源
+		Set&lt;Resource&gt; actualResources = new LinkedHashSet&lt;&gt;(4);
+
+		//判断location是相对路径还是绝对路径
+		// Discover whether the location is an absolute or relative URI
+		boolean absoluteLocation = false;
+		try {
+			absoluteLocation = ResourcePatternUtils.isUrl(location) || ResourceUtils.toURI(location).isAbsolute();
+		}
+		catch (URISyntaxException ex) {
+			// cannot convert to an URI, considering the location relative
+			// unless it is the well-known Spring prefix &quot;classpath*:&quot;
+		}
+
+		// Absolute or relative?
+		//绝对路径
+		if (absoluteLocation) {
+			try {
+				//添加配置文件地址的Resource到actualResources中，并且加载对应的BeanDefinition
+				int importCount = getReaderContext().getReader().loadBeanDefinitions(location, actualResources);
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Imported &quot; + importCount + &quot; bean definitions from URL location [&quot; + location + &quot;]&quot;);
+				}
+			}
+			catch (BeanDefinitionStoreException ex) {
+				getReaderContext().error(
+						&quot;Failed to import bean definitions from URL location [&quot; + location + &quot;]&quot;, ele, ex);
+			}
+		}
+		//相对路径
+		else {
+			// No URL -&gt; considering resource location as relative to the current file.
+			try {
+				int importCount;
+				//创建相对路径的Resource
+				Resource relativeResource = getReaderContext().getResource().createRelative(location);
+				if (relativeResource.exists()) {
+					//加载relativeResource对应的BeanDefinition
+					importCount = getReaderContext().getReader().loadBeanDefinitions(relativeResource);
+					//添加到actualResources中
+					actualResources.add(relativeResource);
+				}
+				//不存在
+				else {
+					//获取根路径地址
+					String baseLocation = getReaderContext().getResource().getURL().toString();
+					//添加配置文件地址的 Resource 到 actualResources 中，并加载相应的 BeanDefinition 们
+					importCount = getReaderContext().getReader().loadBeanDefinitions(
+							StringUtils.applyRelativePath(baseLocation, location), actualResources);
+				}
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Imported &quot; + importCount + &quot; bean definitions from relative location [&quot; + location + &quot;]&quot;);
+				}
+			}
+			catch (IOException ex) {
+				getReaderContext().error(&quot;Failed to resolve current resource location&quot;, ele, ex);
+			}
+			catch (BeanDefinitionStoreException ex) {
+				getReaderContext().error(
+						&quot;Failed to import bean definitions from relative location [&quot; + location + &quot;]&quot;, ele, ex);
+			}
+		}
+		//解析成功后，进行监听器激活处理
+		Resource[] actResArray = actualResources.toArray(new Resource[0]);
+		getReaderContext().fireImportProcessed(location, actResArray, extractSource(ele));
+	}
+</code></pre>
+<ul>
+<li>解析import的流程
+<ul>
+<li>获取Resource的值，值表示对应的资源的路径
+<ul>
+<li>解析路径中的系统属性，例如“${user.dir}”</li>
+</ul>
+</li>
+<li>判断是绝对路径还是相对路径
+<ul>
+<li>绝对路径，递归调用Bean的解析过程，进行另一次的解析</li>
+<li>相对路径，计算出绝对路径得到Resource，然后进行解析</li>
+</ul>
+</li>
+<li>通知监听器，解析完毕</li>
+</ul>
+</li>
+</ul>
+<h5 id="21-判断路径">2.1 判断路径</h5>
+<pre><code>	absoluteLocation = ResourcePatternUtils.isUrl(location) || ResourceUtils.toURI(location).isAbsolute();
+</code></pre>
+<ul>
+<li>判断绝对路径的规则如下：
+<ul>
+<li>以classpath*：或者classpath：开头的为绝对路径</li>
+<li>能够通过该location构建出java.net.URL的为绝对路径</li>
+<li>根据location构造java.net.URI判断调用#isAbsolute方法，判断是否是绝对路径</li>
+</ul>
+</li>
+</ul>
+<h5 id="22-处理绝对路径">2.2 处理绝对路径</h5>
+<ul>
+<li>如果location是绝对路径的话，调用#loadBeanDefinitions方法</li>
+</ul>
+<pre><code>/**
+	 * Load bean definitions from the specified resource location.
+	 * &lt;p&gt;The location can also be a location pattern, provided that the
+	 * ResourceLoader of this bean definition reader is a ResourcePatternResolver.
+	 * @param location the resource location, to be loaded with the ResourceLoader
+	 * (or ResourcePatternResolver) of this bean definition reader
+	 * @param actualResources a Set to be filled with the actual Resource objects
+	 * that have been resolved during the loading process. May be {@code null}
+	 * to indicate that the caller is not interested in those Resource objects.
+	 * @return the number of bean definitions found
+	 * @throws BeanDefinitionStoreException in case of loading or parsing errors
+	 * @see #getResourceLoader()
+	 * @see #loadBeanDefinitions(org.springframework.core.io.Resource)
+	 * @see #loadBeanDefinitions(org.springframework.core.io.Resource[])
+	 */
+	public int loadBeanDefinitions(String location, @Nullable Set&lt;Resource&gt; actualResources) throws BeanDefinitionStoreException {
+		//获取ResourceLoader对象
+		ResourceLoader resourceLoader = getResourceLoader();
+		if (resourceLoader == null) {
+			throw new BeanDefinitionStoreException(
+					&quot;Cannot load bean definitions from location [&quot; + location + &quot;]: no ResourceLoader available&quot;);
+		}
+
+		if (resourceLoader instanceof ResourcePatternResolver) {
+			// Resource pattern matching available.
+			try {
+				//获取Resource数组，因为可能有多个Resource
+				Resource[] resources = ((ResourcePatternResolver) resourceLoader).getResources(location);
+				//加载BeanDefinition
+				int count = loadBeanDefinitions(resources);
+				if (actualResources != null) {
+					Collections.addAll(actualResources, resources);
+				}
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Loaded &quot; + count + &quot; bean definitions from location pattern [&quot; + location + &quot;]&quot;);
+				}
+				return count;
+			}
+			catch (IOException ex) {
+				throw new BeanDefinitionStoreException(
+						&quot;Could not resolve bean definition resource pattern [&quot; + location + &quot;]&quot;, ex);
+			}
+		}
+		else {
+			//获取Resource对象
+			// Can only load single resources by absolute URL.
+			Resource resource = resourceLoader.getResource(location);
+			//加载BeanDefinition
+			int count = loadBeanDefinitions(resource);
+			if (actualResources != null) {
+				actualResources.add(resource);
+			}
+			if (logger.isTraceEnabled()) {
+				logger.trace(&quot;Loaded &quot; + count + &quot; bean definitions from location [&quot; + location + &quot;]&quot;);
+			}
+			return count;
+		}
+	}
+</code></pre>
+<ul>
+<li>整体逻辑
+<ul>
+<li>获取ResourceLoader对象</li>
+<li>根据不同的ResourceLoader执行的逻辑不同，主要是有可能存在多个Resources</li>
+<li>然后调用#loadBeanDefinitions方法，所以这是一个递归的过程</li>
+<li>例外获取的Resource对象或者数组都会添加到actualResources</li>
+</ul>
+</li>
+</ul>
+<h5 id="23-处理相对路径">2.3 处理相对路径</h5>
+<ul>
+<li>若果location是相对路径，则会根据Resource计算出对应的相对路径的Resource对象，若该Resource对象存在，调用#loadBeanDefinitions方法进行加载</li>
+<li>否则，构造一个绝对location，即StringUtils.applyRelativePath(baseLocation, location)，并且调用#loadBeanDefinitions方法，与绝对路径一样</li>
+</ul>
+<h4 id="3-小结">3、小结</h4>
+<ul>
+<li>import标签的解析比较明朗，获取Resource属性值，得到正确的资源路径，然后调用#loadBeanDefinitions进行递归的BeanDefinition加载</li>
+</ul>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1-import%E7%A4%BA%E4%BE%8B">1、 import示例</a></li>
+<li><a href="#2-importbeandefinitionresource">2、 importBeanDefinitionResource</a>
+<ul>
+<li><a href="#21-%E5%88%A4%E6%96%AD%E8%B7%AF%E5%BE%84">2.1 判断路径</a></li>
+<li><a href="#22-%E5%A4%84%E7%90%86%E7%BB%9D%E5%AF%B9%E8%B7%AF%E5%BE%84">2.2 处理绝对路径</a></li>
+<li><a href="#23-%E5%A4%84%E7%90%86%E7%9B%B8%E5%AF%B9%E8%B7%AF%E5%BE%84">2.3 处理相对路径</a></li>
+</ul>
+</li>
+<li><a href="#3-%E5%B0%8F%E7%BB%93">3、小结</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/ioc-zhi-zhu-ce-beandefinitions">
+              <h3 class="post-title">
+                IoC 之注册 BeanDefinitions
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

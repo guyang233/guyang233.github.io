@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://guyang233.github.io</id>
     <title>Gridea</title>
-    <updated>2020-03-16T14:33:24.074Z</updated>
+    <updated>2020-03-17T14:22:19.853Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://guyang233.github.io"/>
     <link rel="self" href="https://guyang233.github.io/atom.xml"/>
@@ -10,6 +10,271 @@
     <logo>https://guyang233.github.io/images/avatar.png</logo>
     <icon>https://guyang233.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, Gridea</rights>
+    <entry>
+        <title type="html"><![CDATA[IoC 之解析 Bean：解析 import 标签]]></title>
+        <id>https://guyang233.github.io/post/ioc-zhi-jie-xi-beanjie-xi-import-biao-qian</id>
+        <link href="https://guyang233.github.io/post/ioc-zhi-jie-xi-beanjie-xi-import-biao-qian">
+        </link>
+        <updated>2020-03-16T14:33:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>根节点或者子节点采用默认的命名空间的话，采用#parseDefaultElement解析</li>
+<li>如果没有采用默认空间命名的话，采用#parseCustomElement解析</li>
+<li>默认解析的代码如下：</li>
+</ul>
+<pre><code>public static final String IMPORT_ELEMENT = &quot;import&quot;;
+
+public static final String ALIAS_ELEMENT = &quot;alias&quot;;
+
+public static final String BEAN_ELEMENT = BeanDefinitionParserDelegate.BEAN_ELEMENT;
+
+public static final String BEAN_ELEMENT = &quot;bean&quot;;
+
+public static final String NESTED_BEANS_ELEMENT = &quot;beans&quot;;
+
+private void parseDefaultElement(Element ele, BeanDefinitionParserDelegate delegate) {
+		//解析默认标签import
+		if (delegate.nodeNameEquals(ele, IMPORT_ELEMENT)) {
+			importBeanDefinitionResource(ele);
+		}
+		//解析默认标签alias
+		else if (delegate.nodeNameEquals(ele, ALIAS_ELEMENT)) {
+			processAliasRegistration(ele);
+		}
+		//解析默认标签bean
+		else if (delegate.nodeNameEquals(ele, BEAN_ELEMENT)) {
+			processBeanDefinition(ele, delegate);
+		}
+		//解析默认标签beans
+		else if (delegate.nodeNameEquals(ele, NESTED_BEANS_ELEMENT)) {
+			// recurse
+			doRegisterBeanDefinitions(ele);
+		}
+	}
+</code></pre>
+<h4 id="1-import示例">1、 import示例</h4>
+<ul>
+<li>避免过多的配置文件，Spring提供import配置文件的方式</li>
+</ul>
+<pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;beans xmlns=&quot;http://www.springframework.org/schema/beans&quot;
+       xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+       xsi:schemaLocation=&quot;http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd&quot;&gt;
+
+    &lt;import resource=&quot;spring-student.xml&quot;/&gt;
+
+    &lt;import resource=&quot;spring-student-dtd.xml&quot;/&gt;
+
+&lt;/beans&gt;
+</code></pre>
+<ul>
+<li>spring.xml配置文件中，使用import标签的方式导入其他模块的配置文件，简化了配置文件维护的复杂度，便于管理
+<ul>
+<li>如果有配置需要修改直接修改对应的配置文件即可</li>
+<li>若有新的配置文件需要被引入的话，直接添加import引入即可</li>
+</ul>
+</li>
+</ul>
+<h4 id="2-importbeandefinitionresource">2、 importBeanDefinitionResource</h4>
+<ul>
+<li>Spring调用#importBeanDefinitionResource方法来对import标签进行解析</li>
+</ul>
+<pre><code>/**
+	 * Parse an &quot;import&quot; element and load the bean definitions
+	 * from the given resource into the bean factory.
+	 */
+	protected void importBeanDefinitionResource(Element ele) {
+		//获取Resource 的值
+		String location = ele.getAttribute(RESOURCE_ATTRIBUTE);
+		//为空，直接退出
+		if (!StringUtils.hasText(location)) {
+			getReaderContext().error(&quot;Resource location must not be empty&quot;, ele);
+			return;
+		}
+		//解析系统属性，格式如:&quot;${user.dir}&quot;
+		// Resolve system properties: e.g. &quot;${user.dir}&quot;
+		location = getReaderContext().getEnvironment().resolveRequiredPlaceholders(location);
+		//实际Resource的集合，即import的地址，有哪些Resource资源
+		Set&lt;Resource&gt; actualResources = new LinkedHashSet&lt;&gt;(4);
+
+		//判断location是相对路径还是绝对路径
+		// Discover whether the location is an absolute or relative URI
+		boolean absoluteLocation = false;
+		try {
+			absoluteLocation = ResourcePatternUtils.isUrl(location) || ResourceUtils.toURI(location).isAbsolute();
+		}
+		catch (URISyntaxException ex) {
+			// cannot convert to an URI, considering the location relative
+			// unless it is the well-known Spring prefix &quot;classpath*:&quot;
+		}
+
+		// Absolute or relative?
+		//绝对路径
+		if (absoluteLocation) {
+			try {
+				//添加配置文件地址的Resource到actualResources中，并且加载对应的BeanDefinition
+				int importCount = getReaderContext().getReader().loadBeanDefinitions(location, actualResources);
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Imported &quot; + importCount + &quot; bean definitions from URL location [&quot; + location + &quot;]&quot;);
+				}
+			}
+			catch (BeanDefinitionStoreException ex) {
+				getReaderContext().error(
+						&quot;Failed to import bean definitions from URL location [&quot; + location + &quot;]&quot;, ele, ex);
+			}
+		}
+		//相对路径
+		else {
+			// No URL -&gt; considering resource location as relative to the current file.
+			try {
+				int importCount;
+				//创建相对路径的Resource
+				Resource relativeResource = getReaderContext().getResource().createRelative(location);
+				if (relativeResource.exists()) {
+					//加载relativeResource对应的BeanDefinition
+					importCount = getReaderContext().getReader().loadBeanDefinitions(relativeResource);
+					//添加到actualResources中
+					actualResources.add(relativeResource);
+				}
+				//不存在
+				else {
+					//获取根路径地址
+					String baseLocation = getReaderContext().getResource().getURL().toString();
+					//添加配置文件地址的 Resource 到 actualResources 中，并加载相应的 BeanDefinition 们
+					importCount = getReaderContext().getReader().loadBeanDefinitions(
+							StringUtils.applyRelativePath(baseLocation, location), actualResources);
+				}
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Imported &quot; + importCount + &quot; bean definitions from relative location [&quot; + location + &quot;]&quot;);
+				}
+			}
+			catch (IOException ex) {
+				getReaderContext().error(&quot;Failed to resolve current resource location&quot;, ele, ex);
+			}
+			catch (BeanDefinitionStoreException ex) {
+				getReaderContext().error(
+						&quot;Failed to import bean definitions from relative location [&quot; + location + &quot;]&quot;, ele, ex);
+			}
+		}
+		//解析成功后，进行监听器激活处理
+		Resource[] actResArray = actualResources.toArray(new Resource[0]);
+		getReaderContext().fireImportProcessed(location, actResArray, extractSource(ele));
+	}
+</code></pre>
+<ul>
+<li>解析import的流程
+<ul>
+<li>获取Resource的值，值表示对应的资源的路径
+<ul>
+<li>解析路径中的系统属性，例如“${user.dir}”</li>
+</ul>
+</li>
+<li>判断是绝对路径还是相对路径
+<ul>
+<li>绝对路径，递归调用Bean的解析过程，进行另一次的解析</li>
+<li>相对路径，计算出绝对路径得到Resource，然后进行解析</li>
+</ul>
+</li>
+<li>通知监听器，解析完毕</li>
+</ul>
+</li>
+</ul>
+<h5 id="21-判断路径">2.1 判断路径</h5>
+<pre><code>	absoluteLocation = ResourcePatternUtils.isUrl(location) || ResourceUtils.toURI(location).isAbsolute();
+</code></pre>
+<ul>
+<li>判断绝对路径的规则如下：
+<ul>
+<li>以classpath*：或者classpath：开头的为绝对路径</li>
+<li>能够通过该location构建出java.net.URL的为绝对路径</li>
+<li>根据location构造java.net.URI判断调用#isAbsolute方法，判断是否是绝对路径</li>
+</ul>
+</li>
+</ul>
+<h5 id="22-处理绝对路径">2.2 处理绝对路径</h5>
+<ul>
+<li>如果location是绝对路径的话，调用#loadBeanDefinitions方法</li>
+</ul>
+<pre><code>/**
+	 * Load bean definitions from the specified resource location.
+	 * &lt;p&gt;The location can also be a location pattern, provided that the
+	 * ResourceLoader of this bean definition reader is a ResourcePatternResolver.
+	 * @param location the resource location, to be loaded with the ResourceLoader
+	 * (or ResourcePatternResolver) of this bean definition reader
+	 * @param actualResources a Set to be filled with the actual Resource objects
+	 * that have been resolved during the loading process. May be {@code null}
+	 * to indicate that the caller is not interested in those Resource objects.
+	 * @return the number of bean definitions found
+	 * @throws BeanDefinitionStoreException in case of loading or parsing errors
+	 * @see #getResourceLoader()
+	 * @see #loadBeanDefinitions(org.springframework.core.io.Resource)
+	 * @see #loadBeanDefinitions(org.springframework.core.io.Resource[])
+	 */
+	public int loadBeanDefinitions(String location, @Nullable Set&lt;Resource&gt; actualResources) throws BeanDefinitionStoreException {
+		//获取ResourceLoader对象
+		ResourceLoader resourceLoader = getResourceLoader();
+		if (resourceLoader == null) {
+			throw new BeanDefinitionStoreException(
+					&quot;Cannot load bean definitions from location [&quot; + location + &quot;]: no ResourceLoader available&quot;);
+		}
+
+		if (resourceLoader instanceof ResourcePatternResolver) {
+			// Resource pattern matching available.
+			try {
+				//获取Resource数组，因为可能有多个Resource
+				Resource[] resources = ((ResourcePatternResolver) resourceLoader).getResources(location);
+				//加载BeanDefinition
+				int count = loadBeanDefinitions(resources);
+				if (actualResources != null) {
+					Collections.addAll(actualResources, resources);
+				}
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Loaded &quot; + count + &quot; bean definitions from location pattern [&quot; + location + &quot;]&quot;);
+				}
+				return count;
+			}
+			catch (IOException ex) {
+				throw new BeanDefinitionStoreException(
+						&quot;Could not resolve bean definition resource pattern [&quot; + location + &quot;]&quot;, ex);
+			}
+		}
+		else {
+			//获取Resource对象
+			// Can only load single resources by absolute URL.
+			Resource resource = resourceLoader.getResource(location);
+			//加载BeanDefinition
+			int count = loadBeanDefinitions(resource);
+			if (actualResources != null) {
+				actualResources.add(resource);
+			}
+			if (logger.isTraceEnabled()) {
+				logger.trace(&quot;Loaded &quot; + count + &quot; bean definitions from location [&quot; + location + &quot;]&quot;);
+			}
+			return count;
+		}
+	}
+</code></pre>
+<ul>
+<li>整体逻辑
+<ul>
+<li>获取ResourceLoader对象</li>
+<li>根据不同的ResourceLoader执行的逻辑不同，主要是有可能存在多个Resources</li>
+<li>然后调用#loadBeanDefinitions方法，所以这是一个递归的过程</li>
+<li>例外获取的Resource对象或者数组都会添加到actualResources</li>
+</ul>
+</li>
+</ul>
+<h5 id="23-处理相对路径">2.3 处理相对路径</h5>
+<ul>
+<li>若果location是相对路径，则会根据Resource计算出对应的相对路径的Resource对象，若该Resource对象存在，调用#loadBeanDefinitions方法进行加载</li>
+<li>否则，构造一个绝对location，即StringUtils.applyRelativePath(baseLocation, location)，并且调用#loadBeanDefinitions方法，与绝对路径一样</li>
+</ul>
+<h4 id="3-小结">3、小结</h4>
+<ul>
+<li>import标签的解析比较明朗，获取Resource属性值，得到正确的资源路径，然后调用#loadBeanDefinitions进行递归的BeanDefinition加载</li>
+</ul>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[IoC 之注册 BeanDefinitions]]></title>
         <id>https://guyang233.github.io/post/ioc-zhi-zhu-ce-beandefinitions</id>
@@ -2210,38 +2475,6 @@ public PathMatchingResourcePatternResolver(@Nullable ClassLoader classLoader) {
 <li>内容参考芋艿的知识星球。搬过来做笔记。</li>
 <li>路漫漫其修远兮，加油！</li>
 </ul>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hello Gridea]]></title>
-        <id>https://guyang233.github.io/post/hello-gridea</id>
-        <link href="https://guyang233.github.io/post/hello-gridea">
-        </link>
-        <updated>2018-12-11T16:00:00.000Z</updated>
-        <summary type="html"><![CDATA[<p>👏  欢迎使用 <strong>Gridea</strong> ！<br>
-✍️  <strong>Gridea</strong> 一个静态博客写作客户端。你可以用它来记录你的生活、心情、知识、笔记、创意... ...</p>
-]]></summary>
-        <content type="html"><![CDATA[<p>👏  欢迎使用 <strong>Gridea</strong> ！<br>
-✍️  <strong>Gridea</strong> 一个静态博客写作客户端。你可以用它来记录你的生活、心情、知识、笔记、创意... ...</p>
-<!-- more -->
-<p><a href="https://github.com/getgridea/gridea">Github</a><br>
-<a href="https://gridea.dev/">Gridea 主页</a><br>
-<a href="http://fehey.com/">示例网站</a></p>
-<h2 id="特性">特性👇</h2>
-<p>📝  你可以使用最酷的 <strong>Markdown</strong> 语法，进行快速创作</p>
-<p>🌉  你可以给文章配上精美的封面图和在文章任意位置插入图片</p>
-<p>🏷️  你可以对文章进行标签分组</p>
-<p>📋  你可以自定义菜单，甚至可以创建外部链接菜单</p>
-<p>💻  你可以在 <strong>Windows</strong>，<strong>MacOS</strong> 或 <strong>Linux</strong> 设备上使用此客户端</p>
-<p>🌎  你可以使用 <strong>𝖦𝗂𝗍𝗁𝗎𝖻 𝖯𝖺𝗀𝖾𝗌</strong> 或 <strong>Coding Pages</strong> 向世界展示，未来将支持更多平台</p>
-<p>💬  你可以进行简单的配置，接入 <a href="https://github.com/gitalk/gitalk">Gitalk</a> 或 <a href="https://github.com/SukkaW/DisqusJS">DisqusJS</a> 评论系统</p>
-<p>🇬🇧  你可以使用<strong>中文简体</strong>或<strong>英语</strong></p>
-<p>🌁  你可以任意使用应用内默认主题或任意第三方主题，强大的主题自定义能力</p>
-<p>🖥  你可以自定义源文件夹，利用 OneDrive、百度网盘、iCloud、Dropbox 等进行多设备同步</p>
-<p>🌱 当然 <strong>Gridea</strong> 还很年轻，有很多不足，但请相信，它会不停向前 🏃</p>
-<p>未来，它一定会成为你离不开的伙伴</p>
-<p>尽情发挥你的才华吧！</p>
-<p>😘 Enjoy~</p>
 ]]></content>
     </entry>
 </feed>
