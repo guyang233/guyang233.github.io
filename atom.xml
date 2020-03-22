@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://guyang233.github.io</id>
     <title>Gridea</title>
-    <updated>2020-03-17T14:22:19.853Z</updated>
+    <updated>2020-03-22T07:02:53.846Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://guyang233.github.io"/>
     <link rel="self" href="https://guyang233.github.io/atom.xml"/>
@@ -10,6 +10,316 @@
     <logo>https://guyang233.github.io/images/avatar.png</logo>
     <icon>https://guyang233.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, Gridea</rights>
+    <entry>
+        <title type="html"><![CDATA[IoC 之解析 <bean> 标签：开启解析进程]]></title>
+        <id>https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-kai-qi-jie-xi-jin-cheng</id>
+        <link href="https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-kai-qi-jie-xi-jin-cheng">
+        </link>
+        <updated>2020-03-22T06:46:48.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="1-processbeandefinition">1、processBeanDefinition</h3>
+<ul>
+<li>解析bean标签</li>
+</ul>
+<pre><code>/**
+	 * Process the given bean element, parsing the bean definition
+	 * and registering it with the registry.
+	 */
+	protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate delegate) {
+		//进行Bean标签解析
+		//如果解析成功，返回BeanDefinitionHolder对象，而BeanDefinitionHolder为name和alias的BeanDefinition 对象
+		//若果解析失败，返回null
+		BeanDefinitionHolder bdHolder = delegate.parseBeanDefinitionElement(ele);
+		if (bdHolder != null) {
+			//进行自定义标签的解析
+			bdHolder = delegate.decorateBeanDefinitionIfRequired(ele, bdHolder);
+			try {
+				//进行BeanDefinition注册
+				// Register the final decorated instance.
+				BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());
+			}
+			catch (BeanDefinitionStoreException ex) {
+				getReaderContext().error(&quot;Failed to register bean definition with name '&quot; +
+						bdHolder.getBeanName() + &quot;'&quot;, ele, ex);
+			}
+			//发出响应事件，通知相关的通知器，已完成对该Bean标签的解析
+			// Send registration event.
+			getReaderContext().fireComponentRegistered(new BeanComponentDefinition(bdHolder));
+		}
+	}
+</code></pre>
+<ul>
+<li>步骤解析
+<ul>
+<li>调用#parseBeanDefinitionElement方法来对标签进行解析
+<ul>
+<li>解析成功，返回BeanDefinitionHolder对象</li>
+<li>解析失败，返回null</li>
+</ul>
+</li>
+<li>如果BeanDefinitionHolder实例不为null， 调用#decorateBeanDefinitionIfRequired方法对自定义标签进行解析</li>
+<li>解析完成之后，调用BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());来进行Bean注册</li>
+<li>最后发出相应事件，通知相关的监听器，完成Bean标签的解析</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-parsebeandefinitionelement">2、parseBeanDefinitionElement</h3>
+<pre><code>	/**
+	 * Parses the supplied {@code &lt;bean&gt;} element. May return {@code null}
+	 * if there were errors during parse. Errors are reported to the
+	 * {@link org.springframework.beans.factory.parsing.ProblemReporter}.
+	 */
+	@Nullable
+	public BeanDefinitionHolder parseBeanDefinitionElement(Element ele) {
+		return parseBeanDefinitionElement(ele, null);
+	}
+
+
+    	/**
+	 * Parses the supplied {@code &lt;bean&gt;} element. May return {@code null}
+	 * if there were errors during parse. Errors are reported to the
+	 * {@link org.springframework.beans.factory.parsing.ProblemReporter}.
+	 */
+	@Nullable
+	public BeanDefinitionHolder parseBeanDefinitionElement(Element ele, @Nullable BeanDefinition containingBean) {
+		//解析id和name
+		String id = ele.getAttribute(ID_ATTRIBUTE);
+		String nameAttr = ele.getAttribute(NAME_ATTRIBUTE);
+		//计算别名集合
+		List&lt;String&gt; aliases = new ArrayList&lt;&gt;();
+		if (StringUtils.hasLength(nameAttr)) {
+			String[] nameArr = StringUtils.tokenizeToStringArray(nameAttr, MULTI_VALUE_ATTRIBUTE_DELIMITERS);
+			aliases.addAll(Arrays.asList(nameArr));
+		}
+		//优先使用BeanName
+		String beanName = id;
+		//其次使用别名集合中的第一个
+		if (!StringUtils.hasText(beanName) &amp;&amp; !aliases.isEmpty()) {
+			//移除别名集合
+			beanName = aliases.remove(0);
+			if (logger.isTraceEnabled()) {
+				logger.trace(&quot;No XML 'id' specified - using '&quot; + beanName +
+						&quot;' as bean name and &quot; + aliases + &quot; as aliases&quot;);
+			}
+		}
+		//检查BeanName的唯一性
+		if (containingBean == null) {
+			checkNameUniqueness(beanName, aliases, ele);
+		}
+		//解析属性，构造AbstractBeanDefinition对象
+		AbstractBeanDefinition beanDefinition = parseBeanDefinitionElement(ele, beanName, containingBean);
+		if (beanDefinition != null) {
+			//beanName为空。使用BeanName生成规则
+			if (!StringUtils.hasText(beanName)) {
+				try {
+					if (containingBean != null) {
+						//生成唯一的BeanName
+						beanName = BeanDefinitionReaderUtils.generateBeanName(
+								beanDefinition, this.readerContext.getRegistry(), true);
+					}
+					else {
+						//生成唯一的BeanName
+						beanName = this.readerContext.generateBeanName(beanDefinition);
+						// Register an alias for the plain bean class name, if still possible,
+						// if the generator returned the class name plus a suffix.
+						// This is expected for Spring 1.2/2.0 backwards compatibility.
+						String beanClassName = beanDefinition.getBeanClassName();
+						if (beanClassName != null &amp;&amp;
+								beanName.startsWith(beanClassName) &amp;&amp; beanName.length() &gt; beanClassName.length() &amp;&amp;
+								!this.readerContext.getRegistry().isBeanNameInUse(beanClassName)) {
+							aliases.add(beanClassName);
+						}
+					}
+					if (logger.isTraceEnabled()) {
+						logger.trace(&quot;Neither XML 'id' nor 'name' specified - &quot; +
+								&quot;using generated bean name [&quot; + beanName + &quot;]&quot;);
+					}
+				}
+				catch (Exception ex) {
+					error(ex.getMessage(), ele);
+					return null;
+				}
+			}
+			//创建返回BeanDefinitionHolder对象
+			String[] aliasesArray = StringUtils.toStringArray(aliases);
+			return new BeanDefinitionHolder(beanDefinition, beanName, aliasesArray);
+		}
+
+		return null;
+	}
+</code></pre>
+<ul>
+<li>这个方法还没有对Bean标签进行解析，只是在解析动作之前做了一些功能架构，主要的工作有
+<ul>
+<li>解析id、name属性，确定alias结合</li>
+<li>检测BeanName是否唯一</li>
+</ul>
+</li>
+<li>BeanName的命名规则
+<ul>
+<li>id不为空， BeanName就是id</li>
+<li>id为空，BeanName就是别名集合中第一个元素</li>
+<li>如果两者都为空，那么根据规则来设置生成BeanName。</li>
+</ul>
+</li>
+<li>#parseBeanDefinitionElement，对属性进行解析</li>
+<li>根据所获取的信息（beanName， alias，BeanDefinition构造BeanDefinitionHolder对象</li>
+<li>检查BeanName唯一性的代码</li>
+</ul>
+<pre><code>/**
+	 * Validate that the specified bean name and aliases have not been used already
+	 * within the current level of beans element nesting.
+	 */
+	protected void checkNameUniqueness(String beanName, List&lt;String&gt; aliases, Element beanElement) {
+		//寻找是否已经使用过BeanName
+		String foundName = null;
+		//先去已经使用过名字的集合中查找
+		if (StringUtils.hasText(beanName) &amp;&amp; this.usedNames.contains(beanName)) {
+			foundName = beanName;
+		}
+		//已经使用过名字的集合中查找匹配的别名
+		if (foundName == null) {
+			foundName = CollectionUtils.findFirstMatch(this.usedNames, aliases);
+		}
+		if (foundName != null) {
+			error(&quot;Bean name '&quot; + foundName + &quot;' is already used in this &lt;beans&gt; element&quot;, beanElement);
+		}
+		//没有的话。把BeanName和别名集合添加进去
+		this.usedNames.add(beanName);
+		this.usedNames.addAll(aliases);
+	}
+</code></pre>
+<ul>
+<li>BeanDefinitionHolder的简化代码</li>
+</ul>
+<pre><code>/**
+ * BeanDefinition 对象
+ */
+private final BeanDefinition beanDefinition;
+/**
+ * Bean 名字
+ */
+private final String beanName;
+/**
+ * 别名集合
+ */
+@Nullable
+private final String[] aliases;
+</code></pre>
+<h4 id="2-1-parsebeandefinitionelement">2、1 parseBeanDefinitionElement</h4>
+<ul>
+<li>对属性进行解析并且封装为AbstractBeanDefinition</li>
+</ul>
+<pre><code>/**
+	 * Parse the bean definition itself, without regard to name or aliases. May return
+	 * {@code null} if problems occurred during the parsing of the bean definition.
+	 */
+		@Nullable
+	public AbstractBeanDefinition parseBeanDefinitionElement(
+			Element ele, String beanName, @Nullable BeanDefinition containingBean) {
+
+		this.parseState.push(new BeanEntry(beanName));
+		//解析class属性
+		String className = null;
+		if (ele.hasAttribute(CLASS_ATTRIBUTE)) {
+			className = ele.getAttribute(CLASS_ATTRIBUTE).trim();
+		}
+		//解析parent属性
+		String parent = null;
+		if (ele.hasAttribute(PARENT_ATTRIBUTE)) {
+			parent = ele.getAttribute(PARENT_ATTRIBUTE);
+		}
+
+		try {
+			//创建用于承载属性的AbstractBeanDefinition
+			AbstractBeanDefinition bd = createBeanDefinition(className, parent);
+			//默认解析Bean的各种属性
+			parseBeanDefinitionAttributes(ele, beanName, containingBean, bd);
+			//提取description
+			bd.setDescription(DomUtils.getChildElementValueByTagName(ele, DESCRIPTION_ELEMENT));
+			// tips：
+			// 下面的一堆是解析 &lt;bean&gt;......&lt;/bean&gt; 内部的子元素，
+			// 解析出来以后的信息都放到 bd 的属性中
+			// 解析元数据 &lt;meta /&gt;
+			parseMetaElements(ele, bd);
+			// 解析 lookup-method 属性 &lt;lookup-method /&gt;
+			parseLookupOverrideSubElements(ele, bd.getMethodOverrides());
+			// 解析 replaced-method 属性 &lt;replaced-method /&gt;
+			parseReplacedMethodSubElements(ele, bd.getMethodOverrides());
+
+			// 解析构造函数参数 &lt;constructor-arg /&gt;
+			parseConstructorArgElements(ele, bd);
+			// 解析 property 子元素 &lt;property /&gt;
+			parsePropertyElements(ele, bd);
+			// 解析 qualifier 子元素 &lt;qualifier /&gt;
+			parseQualifierElements(ele, bd);
+
+			bd.setResource(this.readerContext.getResource());
+			bd.setSource(extractSource(ele));
+
+			return bd;
+		}
+		catch (ClassNotFoundException ex) {
+			error(&quot;Bean class [&quot; + className + &quot;] not found&quot;, ele, ex);
+		}
+		catch (NoClassDefFoundError err) {
+			error(&quot;Class that bean class [&quot; + className + &quot;] depends on not found&quot;, ele, err);
+		}
+		catch (Throwable ex) {
+			error(&quot;Unexpected failure during bean definition parsing&quot;, ele, ex);
+		}
+		finally {
+			this.parseState.pop();
+		}
+
+		return null;
+	}
+</code></pre>
+<h4 id="2-2-createbeandefinition">2、2 createBeanDefinition</h4>
+<ul>
+<li>创建AbstractBeanDefinition</li>
+</ul>
+<pre><code>/**
+	 * Create a bean definition for the given class name and parent name.
+	 * @param className the name of the bean class
+	 * @param parentName the name of the bean's parent bean
+	 * @return the newly created bean definition
+	 * @throws ClassNotFoundException if bean class resolution was attempted but failed
+	 */
+	protected AbstractBeanDefinition createBeanDefinition(@Nullable String className, @Nullable String parentName)
+			throws ClassNotFoundException {
+
+		return BeanDefinitionReaderUtils.createBeanDefinition(
+				parentName, className, this.readerContext.getBeanClassLoader());
+	}
+
+    /**
+	 * Create a new GenericBeanDefinition for the given parent name and class name,
+	 * eagerly loading the bean class if a ClassLoader has been specified.
+	 * @param parentName the name of the parent bean, if any
+	 * @param className the name of the bean class, if any
+	 * @param classLoader the ClassLoader to use for loading bean classes
+	 * (can be {@code null} to just register bean classes by name)
+	 * @return the bean definition
+	 * @throws ClassNotFoundException if the bean class could not be loaded
+	 */
+	public static AbstractBeanDefinition createBeanDefinition(
+			@Nullable String parentName, @Nullable String className, @Nullable ClassLoader classLoader) throws ClassNotFoundException {
+
+		GenericBeanDefinition bd = new GenericBeanDefinition();
+		bd.setParentName(parentName);
+		if (className != null) {
+			if (classLoader != null) {
+				bd.setBeanClass(ClassUtils.forName(className, classLoader));
+			}
+			else {
+				bd.setBeanClassName(className);
+			}
+		}
+		return bd;
+	}
+</code></pre>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[IoC 之解析 Bean：解析 import 标签]]></title>
         <id>https://guyang233.github.io/post/ioc-zhi-jie-xi-beanjie-xi-import-biao-qian</id>
@@ -2392,89 +2702,6 @@ public PathMatchingResourcePatternResolver(@Nullable ClassLoader classLoader) {
 </ul>
 <pre><code>
 </code></pre>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Spring-IoC的理解]]></title>
-        <id>https://guyang233.github.io/post/spring</id>
-        <link href="https://guyang233.github.io/post/spring">
-        </link>
-        <updated>2020-01-13T01:42:00.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="1-ioc理论">1、 IoC理论</h3>
-<ul>
-<li>
-<p>IoC，控制反转，别名DI，依赖注入。</p>
-</li>
-<li>
-<p>IoC就是SpringIoC容器来负责生命周期和对象之间的关系。</p>
-</li>
-<li>
-<p>依赖的不是对象本身，是依赖对象提供的服务，IoC的理念就是让别人为你服务。<br>
-<img src="https://guyang233.github.io/post-images/1578880609206.png" alt="" loading="lazy"></p>
-</li>
-<li>
-<p>理解控制反转</p>
-<ul>
-<li>谁控制谁：传统的模式中，都是直接new一个对象的方式来创建对象，依赖对象是直接创建的。但是有了IoC之后是由IoC容器控制。IoC容器控制对象</li>
-<li>控制什么：控制对象</li>
-<li>为什么是反转：正转是主动创建依赖对象，现在是由IoC创建</li>
-<li>那些方面反转了：依赖对象的获取</li>
-</ul>
-</li>
-<li>
-<p>对象的注入形式</p>
-<ul>
-<li>setter</li>
-<li>构造器</li>
-<li>接口</li>
-</ul>
-</li>
-</ul>
-<h3 id="2-各个组件">2、各个组件</h3>
-<h4 id="21-resource体系">2.1 Resource体系</h4>
-<ul>
-<li>对资源的抽象，每一个实现类都代表了一种资源的访问策略ClassPathResource、FileSystemResource等<br>
-<img src="https://guyang233.github.io/post-images/1578881990771.png" alt="" loading="lazy"></li>
-</ul>
-<h5 id="211-resourceloader体系">2.1.1 ResourceLoader体系</h5>
-<ul>
-<li>有了资源，就有资源加载。利用ResourceLoader来进行资源的统一加载。<br>
-<img src="https://guyang233.github.io/post-images/1578882068404.png" alt="" loading="lazy"></li>
-</ul>
-<h4 id="22-beanfactory体系">2.2 BeanFactory体系</h4>
-<ul>
-<li>一个非常纯粹的的bean容器，IoC必备的数据结构，其中BeanDefinition是他的基本结构。BeanFactory内部维护一个BeanDefinition Map，可根据BeandDefinition的描述进行Bean的创建和管理<br>
-<img src="https://guyang233.github.io/post-images/1578882221202.png" alt="" loading="lazy">
-<ul>
-<li>BeanFactory有三个直接子类</li>
-<li>DefaultListableBeanFactory为最终默认实现，他实现了所有的接口。</li>
-</ul>
-</li>
-</ul>
-<h4 id="23-beandefinition体系">2.3 BeanDefinition体系</h4>
-<pre><code>- 用来描述Spring中的Bean对象
-</code></pre>
-<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578883198907.png" alt="" loading="lazy"></figure>
-<h4 id="24-beandefinitionreader体系">2.4 BeanDefinitionReader体系</h4>
-<pre><code>- 作用是读取Spring的配置文件的内容，并将其转换为IoC容器内部的数据结构，BeanDefinition
-</code></pre>
-<figure data-type="image" tabindex="2"><img src="https://guyang233.github.io/post-images/1578883090558.png" alt="" loading="lazy"></figure>
-<h4 id="25-applicationcontext体系">2.5 ApplicationContext体系</h4>
-<ul>
-<li>大名鼎鼎的Spring容器，叫做应用上下文。继承BeanFactory，是BeanFactory的升级版本。与BeanFactory的区别：
-<ul>
-<li>继承MessageResource接口，提供国际化标准访问策略</li>
-<li>继承ApplicationEventPublisher接口，提供强大的事件机制</li>
-<li>扩展ResourceLoader，加载多钟Resource，灵活访问不同的资源</li>
-<li>对web应用的支持</li>
-</ul>
-</li>
-</ul>
-<h3 id="3-总结">3、总结</h3>
-<ul>
-<li>内容参考芋艿的知识星球。搬过来做笔记。</li>
-<li>路漫漫其修远兮，加油！</li>
-</ul>
 ]]></content>
     </entry>
 </feed>
