@@ -1,0 +1,498 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IoC 之解析 &lt;bean&gt; 标签：BeanDefinition | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1584862738521">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="IoC 之解析 &lt;bean&gt; 标签：BeanDefinition | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="1、BeanDefinition
+
+是一个接口，描述定义了Bean实例的定义，包括属性值、构造方法值和继承自它的类的更多信息
+
+String SCOPE_SINGLETON = ConfigurableBeanFactory.SCOPE_S..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1584862738521" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              IoC 之解析 &lt;bean&gt; 标签：BeanDefinition
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-03-22
+              </span>
+              <span>
+                7 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <h3 id="1-beandefinition">1、BeanDefinition</h3>
+<ul>
+<li>是一个接口，描述定义了Bean实例的定义，包括属性值、构造方法值和继承自它的类的更多信息</li>
+</ul>
+<pre><code>String SCOPE_SINGLETON = ConfigurableBeanFactory.SCOPE_SINGLETON;
+String SCOPE_PROTOTYPE = ConfigurableBeanFactory.SCOPE_PROTOTYPE;
+
+
+int ROLE_APPLICATION = 0;
+int ROLE_SUPPORT = 1;
+int ROLE_INFRASTRUCTURE = 2;
+
+void setParentName(@Nullable String parentName);
+@Nullable
+String getParentName();
+
+void setBeanClassName(@Nullable String beanClassName);
+@Nullable
+String getBeanClassName();
+
+void setScope(@Nullable String scope);
+@Nullable
+String getScope();
+
+void setLazyInit(boolean lazyInit);
+boolean isLazyInit();
+
+void setDependsOn(@Nullable String... dependsOn);
+@Nullable
+String[] getDependsOn();
+
+void setAutowireCandidate(boolean autowireCandidate);
+boolean isAutowireCandidate();
+
+void setPrimary(boolean primary);
+boolean isPrimary();
+
+void setFactoryBeanName(@Nullable String factoryBeanName);
+@Nullable
+String getFactoryBeanName();
+
+void setFactoryMethodName(@Nullable String factoryMethodName);
+@Nullable
+String getFactoryMethodName();
+
+ConstructorArgumentValues getConstructorArgumentValues();
+default boolean hasConstructorArgumentValues() {
+	return !getConstructorArgumentValues().isEmpty();
+}
+
+MutablePropertyValues getPropertyValues();
+default boolean hasPropertyValues() {
+	return !getPropertyValues().isEmpty();
+}
+
+void setInitMethodName(@Nullable String initMethodName);
+@Nullable
+String getInitMethodName();
+
+void setDestroyMethodName(@Nullable String destroyMethodName);
+@Nullable
+String getDestroyMethodName();
+
+void setRole(int role);
+int getRole();
+
+void setDescription(@Nullable String description);
+@Nullable
+String getDescription();
+
+boolean isSingleton();
+
+boolean isPrototype();
+
+boolean isAbstract();
+
+@Nullable
+String getResourceDescription();
+
+@Nullable
+BeanDefinition getOriginatingBeanDefinition();
+</code></pre>
+<h4 id="1-1-beandefinition的父关系">1、1 BeanDefinition的父关系</h4>
+<ul>
+<li>BeanDefinition继承了AttributeAccessor接口。定义了与其他对象的（元数据）进行连接和访问的约定，即对书香的修改，包括获取、设置、删除</li>
+</ul>
+<pre><code>/**
+ * Interface defining a generic contract for attaching and accessing metadata
+ * to/from arbitrary objects.
+ *
+ * @author Rob Harrop
+ * @since 2.0
+ */
+public interface AttributeAccessor {
+
+	/**
+	 * Set the attribute defined by {@code name} to the supplied {@code value}.
+	 * If {@code value} is {@code null}, the attribute is {@link #removeAttribute removed}.
+	 * &lt;p&gt;In general, users should take care to prevent overlaps with other
+	 * metadata attributes by using fully-qualified names, perhaps using
+	 * class or package names as prefix.
+	 * @param name the unique attribute key
+	 * @param value the attribute value to be attached
+	 */
+	void setAttribute(String name, @Nullable Object value);
+
+	/**
+	 * Get the value of the attribute identified by {@code name}.
+	 * Return {@code null} if the attribute doesn't exist.
+	 * @param name the unique attribute key
+	 * @return the current value of the attribute, if any
+	 */
+	@Nullable
+	Object getAttribute(String name);
+
+	/**
+	 * Remove the attribute identified by {@code name} and return its value.
+	 * Return {@code null} if no attribute under {@code name} is found.
+	 * @param name the unique attribute key
+	 * @return the last value of the attribute, if any
+	 */
+	@Nullable
+	Object removeAttribute(String name);
+
+	/**
+	 * Return {@code true} if the attribute identified by {@code name} exists.
+	 * Otherwise return {@code false}.
+	 * @param name the unique attribute key
+	 */
+	boolean hasAttribute(String name);
+
+	/**
+	 * Return the names of all attributes.
+	 */
+	String[] attributeNames();
+
+}
+</code></pre>
+<ul>
+<li>BeanMetadataElement接口，Bean元对象持有的配置元素可以通过#getSource获取</li>
+</ul>
+<pre><code>/**
+ * Interface to be implemented by bean metadata elements
+ * that carry a configuration source object.
+ *
+ * @author Juergen Hoeller
+ * @since 2.0
+ */
+public interface BeanMetadataElement {
+
+	/**
+	 * Return the configuration source {@code Object} for this metadata element
+	 * (may be {@code null}).
+	 */
+	@Nullable
+	default Object getSource() {
+		return null;
+	}
+
+}
+</code></pre>
+<h4 id="1-2beandefinition的子关系">1、2BeanDefinition的子关系</h4>
+<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1584861940380.png" alt="" loading="lazy"></figure>
+<ul>
+<li>我们常用的三个实现类有
+<ul>
+<li>org.springframework.beans.factory.support.ChildBeanDefinition</li>
+<li>org.springframework.beans.factory.support.RootBeanDefinition</li>
+<li>org.springframework.beans.factory.support.GenericBeanDefinition</li>
+<li>三者都继承自AbstractBeanDefinition, AbstractBeanDefinition对三个子类的共同属性抽象</li>
+<li>如果配置文件中定义了父<bean>和子<bean>，则父bean用RootBeanDefinition表示，子bean用ChildBeanDefinition表示，没有父bean的就使用RootBeanDefinition表示</li>
+<li>GenericBeanDefinition是一站式服务类</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-解析bean标签">2、解析Bean标签</h3>
+<h4 id="2-1-createbeandefinition">2、1 createBeanDefinition</h4>
+<pre><code>	/**
+	 * Create a bean definition for the given class name and parent name.
+	 * @param className the name of the bean class
+	 * @param parentName the name of the bean's parent bean
+	 * @return the newly created bean definition
+	 * @throws ClassNotFoundException if bean class resolution was attempted but failed
+	 */
+	protected AbstractBeanDefinition createBeanDefinition(@Nullable String className, @Nullable String parentName)
+			throws ClassNotFoundException {
+
+		return BeanDefinitionReaderUtils.createBeanDefinition(
+				parentName, className, this.readerContext.getBeanClassLoader());
+	}
+
+    	/**
+    * 主要是创建GenericBeanDefinition对象，设置parentName，BeanClass，ClassName属性
+	 * Create a new GenericBeanDefinition for the given parent name and class name,
+	 * eagerly loading the bean class if a ClassLoader has been specified.
+	 * @param parentName the name of the parent bean, if any
+	 * @param className the name of the bean class, if any
+	 * @param classLoader the ClassLoader to use for loading bean classes
+	 * (can be {@code null} to just register bean classes by name)
+	 * @return the bean definition
+	 * @throws ClassNotFoundException if the bean class could not be loaded
+	 */
+	public static AbstractBeanDefinition createBeanDefinition(
+			@Nullable String parentName, @Nullable String className, @Nullable ClassLoader classLoader) throws ClassNotFoundException {
+		//创建GenericBeanDefinition对象
+		GenericBeanDefinition bd = new GenericBeanDefinition();
+		//设置parentName
+		bd.setParentName(parentName);
+		if (className != null) {
+			if (classLoader != null) {
+				//设置BeanClass
+				bd.setBeanClass(ClassUtils.forName(className, classLoader));
+			}
+			else {
+				//设置BeanName
+				bd.setBeanClassName(className);
+			}
+		}
+		return bd;
+	}
+</code></pre>
+<h4 id="22-parsebeandefinitionattributes">2.2 parseBeanDefinitionAttributes</h4>
+<ul>
+<li>对Bean标签进行解析</li>
+</ul>
+<pre><code>	/**
+	 * Apply the attributes of the given bean element to the given bean * definition.
+	 * @param ele bean declaration element
+	 * @param beanName bean name
+	 * @param containingBean containing bean definition
+	 * @return a bean definition initialized according to the bean element attributes
+	 */
+	public AbstractBeanDefinition parseBeanDefinitionAttributes(Element ele, String beanName,
+			@Nullable BeanDefinition containingBean, AbstractBeanDefinition bd) {
+		//解析scope属性
+		if (ele.hasAttribute(SINGLETON_ATTRIBUTE)) {
+			error(&quot;Old 1.x 'singleton' attribute in use - upgrade to 'scope' declaration&quot;, ele);
+		}
+		else if (ele.hasAttribute(SCOPE_ATTRIBUTE)) {
+			bd.setScope(ele.getAttribute(SCOPE_ATTRIBUTE));
+		}
+		else if (containingBean != null) {
+			// Take default from containing bean in case of an inner bean definition.
+			bd.setScope(containingBean.getScope());
+		}
+		//解析abstract 属性
+		if (ele.hasAttribute(ABSTRACT_ATTRIBUTE)) {
+			bd.setAbstract(TRUE_VALUE.equals(ele.getAttribute(ABSTRACT_ATTRIBUTE)));
+		}
+		//解析lazy-init
+		String lazyInit = ele.getAttribute(LAZY_INIT_ATTRIBUTE);
+		if (isDefaultValue(lazyInit)) {
+			lazyInit = this.defaults.getLazyInit();
+		}
+		bd.setLazyInit(TRUE_VALUE.equals(lazyInit));
+		//解析auto-wire属性
+		String autowire = ele.getAttribute(AUTOWIRE_ATTRIBUTE);
+		bd.setAutowireMode(getAutowireMode(autowire));
+		//解析depends-on属性
+		if (ele.hasAttribute(DEPENDS_ON_ATTRIBUTE)) {
+			String dependsOn = ele.getAttribute(DEPENDS_ON_ATTRIBUTE);
+			bd.setDependsOn(StringUtils.tokenizeToStringArray(dependsOn, MULTI_VALUE_ATTRIBUTE_DELIMITERS));
+		}
+		// 解析 autowire-candidate 属性
+		String autowireCandidate = ele.getAttribute(AUTOWIRE_CANDIDATE_ATTRIBUTE);
+		if (isDefaultValue(autowireCandidate)) {
+			String candidatePattern = this.defaults.getAutowireCandidates();
+			if (candidatePattern != null) {
+				String[] patterns = StringUtils.commaDelimitedListToStringArray(candidatePattern);
+				bd.setAutowireCandidate(PatternMatchUtils.simpleMatch(patterns, beanName));
+			}
+		}
+		else {
+			bd.setAutowireCandidate(TRUE_VALUE.equals(autowireCandidate));
+		}
+		//解析primary属性
+		if (ele.hasAttribute(PRIMARY_ATTRIBUTE)) {
+			bd.setPrimary(TRUE_VALUE.equals(ele.getAttribute(PRIMARY_ATTRIBUTE)));
+		}
+		//解析init-method属性
+		if (ele.hasAttribute(INIT_METHOD_ATTRIBUTE)) {
+			String initMethodName = ele.getAttribute(INIT_METHOD_ATTRIBUTE);
+			bd.setInitMethodName(initMethodName);
+		}
+		else if (this.defaults.getInitMethod() != null) {
+			bd.setInitMethodName(this.defaults.getInitMethod());
+			bd.setEnforceInitMethod(false);
+		}
+		//解析destory-method属性
+		if (ele.hasAttribute(DESTROY_METHOD_ATTRIBUTE)) {
+			String destroyMethodName = ele.getAttribute(DESTROY_METHOD_ATTRIBUTE);
+			bd.setDestroyMethodName(destroyMethodName);
+		}
+		else if (this.defaults.getDestroyMethod() != null) {
+			bd.setDestroyMethodName(this.defaults.getDestroyMethod());
+			bd.setEnforceDestroyMethod(false);
+		}
+		//解析factory-method属性
+		if (ele.hasAttribute(FACTORY_METHOD_ATTRIBUTE)) {
+			bd.setFactoryMethodName(ele.getAttribute(FACTORY_METHOD_ATTRIBUTE));
+		}
+		if (ele.hasAttribute(FACTORY_BEAN_ATTRIBUTE)) {
+			bd.setFactoryBeanName(ele.getAttribute(FACTORY_BEAN_ATTRIBUTE));
+		}
+
+		return bd;
+	}
+</code></pre>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1-beandefinition">1、BeanDefinition</a>
+<ul>
+<li><a href="#1-1-beandefinition%E7%9A%84%E7%88%B6%E5%85%B3%E7%B3%BB">1、1 BeanDefinition的父关系</a></li>
+<li><a href="#1-2beandefinition%E7%9A%84%E5%AD%90%E5%85%B3%E7%B3%BB">1、2BeanDefinition的子关系</a></li>
+</ul>
+</li>
+<li><a href="#2-%E8%A7%A3%E6%9E%90bean%E6%A0%87%E7%AD%BE">2、解析Bean标签</a>
+<ul>
+<li><a href="#2-1-createbeandefinition">2、1 createBeanDefinition</a></li>
+<li><a href="#22-parsebeandefinitionattributes">2.2 parseBeanDefinitionAttributes</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-kai-qi-jie-xi-jin-cheng">
+              <h3 class="post-title">
+                IoC 之解析 &lt;bean&gt; 标签：开启解析进程
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>
