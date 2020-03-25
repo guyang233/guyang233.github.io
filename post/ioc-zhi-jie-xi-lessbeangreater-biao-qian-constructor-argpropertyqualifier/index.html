@@ -1,0 +1,551 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IoC 之解析 &lt;bean&gt; 标签：constructor-arg、property、qualifier | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1585155333795">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="IoC 之解析 &lt;bean&gt; 标签：constructor-arg、property、qualifier | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="1.constructor-arg
+public class StudentService {
+
+    private String name;
+
+    private Integer age;
+
+    private BookSer..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1585155333795" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              IoC 之解析 &lt;bean&gt; 标签：constructor-arg、property、qualifier
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-03-23
+              </span>
+              <span>
+                9 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <h3 id="1constructor-arg">1.constructor-arg</h3>
+<pre><code>public class StudentService {
+
+    private String name;
+
+    private Integer age;
+
+    private BookService bookService;
+
+    StudentService(String name, Integer age, BookService bookService){
+
+        this.name = name;
+
+        this.age = age;
+
+        this.bookService = bookService;
+
+    }
+
+}
+
+
+&lt;bean id=&quot;bookService&quot; class=&quot;org.springframework.core.service.BookService&quot;/&gt;
+
+&lt;bean id=&quot;studentService&quot; class=&quot;org.springframework.core.service.StudentService&quot;&gt;
+    &lt;constructor-arg index=&quot;0&quot; value=&quot;chenssy&quot;/&gt;
+    &lt;constructor-arg name=&quot;age&quot; value=&quot;100&quot;/&gt;
+    &lt;constructor-arg name=&quot;bookService&quot; ref=&quot;bookService&quot;/&gt;
+&lt;/bean&gt;
+</code></pre>
+<ul>
+<li>StudentService 定义一个构造函数，配置文件中使用constructor-arg元素对其配置，该元素可以实现对StudentService自动寻找构造函数，并在初始化的时候将值作为参数进行设置</li>
+</ul>
+<h4 id="12-parseconstructorargelements">1.2 parseConstructorArgElements</h4>
+<ul>
+<li>调用#parseConstructorArgElements方法来对constructor-arg元素进行解析</li>
+</ul>
+<pre><code>	/**
+	 * Parse constructor-arg sub-elements of the given bean element.
+	 */
+	public void parseConstructorArgElements(Element beanEle, BeanDefinition bd) {
+		NodeList nl = beanEle.getChildNodes();
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, CONSTRUCTOR_ARG_ELEMENT)) {
+				parseConstructorArgElement((Element) node, bd);
+			}
+		}
+	}
+
+</code></pre>
+<ul>
+<li>遍历所有的子元素，如果子元素为constructor-arg， 则调用parseConstructorArgElement方法进行解析</li>
+</ul>
+<h4 id="13-parseconstructorargelement">1.3 parseConstructorArgElement</h4>
+<pre><code>/**
+	 * Parse a constructor-arg element.
+	 */
+	public void parseConstructorArgElement(Element ele, BeanDefinition bd) {
+		//提取index、type、name的属性值
+		String indexAttr = ele.getAttribute(INDEX_ATTRIBUTE);
+		String typeAttr = ele.getAttribute(TYPE_ATTRIBUTE);
+		String nameAttr = ele.getAttribute(NAME_ATTRIBUTE);
+		//如果有index
+		if (StringUtils.hasLength(indexAttr)) {
+			try {
+				int index = Integer.parseInt(indexAttr);
+				if (index &lt; 0) {
+					error(&quot;'index' cannot be lower than 0&quot;, ele);
+				}
+				else {
+					try {
+						this.parseState.push(new ConstructorArgumentEntry(index));
+						//解析ele对应的属性元素
+						Object value = parsePropertyValue(ele, bd, null);
+						//根据解析的元素属性，构造一个ValueHolder对象
+						ConstructorArgumentValues.ValueHolder valueHolder = new ConstructorArgumentValues.ValueHolder(value);
+						if (StringUtils.hasLength(typeAttr)) {
+							valueHolder.setType(typeAttr);
+						}
+						if (StringUtils.hasLength(nameAttr)) {
+							valueHolder.setName(nameAttr);
+						}
+						valueHolder.setSource(extractSource(ele));
+						//不允许重复指定相同参数
+						if (bd.getConstructorArgumentValues().hasIndexedArgumentValue(index)) {
+							error(&quot;Ambiguous constructor-arg entries for index &quot; + index, ele);
+						}
+						else {
+							bd.getConstructorArgumentValues().addIndexedArgumentValue(index, valueHolder);
+						}
+					}
+					finally {
+						this.parseState.pop();
+					}
+				}
+			}
+			catch (NumberFormatException ex) {
+				error(&quot;Attribute 'index' of tag 'constructor-arg' must be an integer&quot;, ele);
+			}
+		}
+		else {
+			try {
+				this.parseState.push(new ConstructorArgumentEntry());
+				Object value = parsePropertyValue(ele, bd, null);
+				ConstructorArgumentValues.ValueHolder valueHolder = new ConstructorArgumentValues.ValueHolder(value);
+				if (StringUtils.hasLength(typeAttr)) {
+					valueHolder.setType(typeAttr);
+				}
+				if (StringUtils.hasLength(nameAttr)) {
+					valueHolder.setName(nameAttr);
+				}
+				valueHolder.setSource(extractSource(ele));
+				bd.getConstructorArgumentValues().addGenericArgumentValue(valueHolder);
+			}
+			finally {
+				this.parseState.pop();
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>
+<p>首先获取index、type、name三个属性值。然后根据是否存在index来区分。执行后续逻辑。其实两者逻辑都差不多</p>
+<ul>
+<li>构造ConstructorArgumentEntry对象，放入ParseState队列中。ConstructorArgumentEntry表示构造函数的参数</li>
+<li>调用#parsePropertyValue方法来解析标签元素，返回属性值</li>
+<li>构造ValueHolder对象，设置type和name</li>
+<li>最后将ValueHolder对象添加到indexedArgumentValues集合中</li>
+</ul>
+</li>
+<li>
+<p>无index的逻辑和有index 的处理逻辑差不多，只是有几点不同</p>
+<ul>
+<li>无index的ConstructorArgumentEntry对象调用的是无参函数</li>
+<li>最后将GenericArgumentValues集合中</li>
+</ul>
+</li>
+</ul>
+<h4 id="14-parsepropertyvalue">1.4 parsePropertyValue</h4>
+<pre><code>/**
+	 * Get the value of a property element. May be a list etc.
+	 * Also used for constructor arguments, &quot;propertyName&quot; being null in this case.
+	 */
+	@Nullable
+	public Object parsePropertyValue(Element ele, BeanDefinition bd, @Nullable String propertyName) {
+		String elementName = (propertyName != null ?
+				&quot;&lt;property&gt; element for property '&quot; + propertyName + &quot;'&quot; :
+				&quot;&lt;constructor-arg&gt; element&quot;);
+
+		//查找子节点中是否含ref、value、list等元素
+		// Should only have one child element: ref, value, list, etc.
+		NodeList nl = ele.getChildNodes();
+		Element subElement = null;
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			//跳过description和meta标签
+			if (node instanceof Element &amp;&amp; !nodeNameEquals(node, DESCRIPTION_ELEMENT) &amp;&amp;
+					!nodeNameEquals(node, META_ELEMENT)) {
+				// Child element is what we're looking for.
+				if (subElement != null) {
+					error(elementName + &quot; must not contain more than one sub-element&quot;, ele);
+				}
+				else {
+					subElement = (Element) node;
+				}
+			}
+		}
+		//是否有ref属性
+		boolean hasRefAttribute = ele.hasAttribute(REF_ATTRIBUTE);
+		//是否有value属性
+		boolean hasValueAttribute = ele.hasAttribute(VALUE_ATTRIBUTE);
+		//同时存在，发生冲突
+		if ((hasRefAttribute &amp;&amp; hasValueAttribute) ||
+				((hasRefAttribute || hasValueAttribute) &amp;&amp; subElement != null)) {
+			error(elementName +
+					&quot; is only allowed to contain either 'ref' attribute OR 'value' attribute OR sub-element&quot;, ele);
+		}
+
+		//将ref属性值构造为RuntimeBeanReference对象
+		if (hasRefAttribute) {
+			String refName = ele.getAttribute(REF_ATTRIBUTE);
+			if (!StringUtils.hasText(refName)) {
+				error(elementName + &quot; contains empty 'ref' attribute&quot;, ele);
+			}
+			RuntimeBeanReference ref = new RuntimeBeanReference(refName);
+			ref.setSource(extractSource(ele));
+			return ref;
+		}
+		//将value属性值构造为TypedStringValue对象
+		else if (hasValueAttribute) {
+			TypedStringValue valueHolder = new TypedStringValue(ele.getAttribute(VALUE_ATTRIBUTE));
+			valueHolder.setSource(extractSource(ele));
+			return valueHolder;
+		}
+		//解析子元素
+		else if (subElement != null) {
+			return parsePropertySubElement(subElement, bd);
+		}
+		else {
+			// Neither child element nor &quot;ref&quot; or &quot;value&quot; attribute found.
+			error(elementName + &quot; must specify a ref or value&quot;, ele);
+			return null;
+		}
+	}
+
+</code></pre>
+<ul>
+<li>提取constructor-arg元素的子元素，ref属性值、value属性值，对其进行判断，以下两种情况是不允许存在的
+<ul>
+<li>ref属性值和value属性值时同时存在的</li>
+<li>存在ref或value并且有子元素存在</li>
+</ul>
+</li>
+<li>如果存在ref属性值，构造为 RuntimeBeanReference实例对象</li>
+<li>如果存在value属性值，构造为TypedStringValue 实例对象</li>
+<li>如果子元素不为空，调用#parsePropertySubElement方法来解析子元素</li>
+</ul>
+<h4 id="15-parsepropertysubelement">1.5 parsePropertySubElement</h4>
+<ul>
+<li>如果constructor-arg中有子元素，调用#parsePropertySubElement方法来进行解析</li>
+</ul>
+<pre><code>	/**
+	 * Parse a value, ref or collection sub-element of a property or
+	 * constructor-arg element.
+	 * @param ele subelement of property element; we don't know which yet
+	 * @param bd the current bean definition (if any)
+	 * @param defaultValueType the default type (class name) for any
+	 * {@code &lt;value&gt;} tag that might be created
+	 */
+	@Nullable
+	public Object parsePropertySubElement(Element ele, @Nullable BeanDefinition bd, @Nullable String defaultValueType) {
+		if (!isDefaultNamespace(ele)) {
+			return parseNestedCustomElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, BEAN_ELEMENT)) {
+			BeanDefinitionHolder nestedBd = parseBeanDefinitionElement(ele, bd);
+			if (nestedBd != null) {
+				nestedBd = decorateBeanDefinitionIfRequired(ele, nestedBd, bd);
+			}
+			return nestedBd;
+		}
+		else if (nodeNameEquals(ele, REF_ELEMENT)) {
+			// A generic reference to any name of any bean.
+			String refName = ele.getAttribute(BEAN_REF_ATTRIBUTE);
+			boolean toParent = false;
+			if (!StringUtils.hasLength(refName)) {
+				// A reference to the id of another bean in a parent context.
+				refName = ele.getAttribute(PARENT_REF_ATTRIBUTE);
+				toParent = true;
+				if (!StringUtils.hasLength(refName)) {
+					error(&quot;'bean' or 'parent' is required for &lt;ref&gt; element&quot;, ele);
+					return null;
+				}
+			}
+			if (!StringUtils.hasText(refName)) {
+				error(&quot;&lt;ref&gt; element contains empty target attribute&quot;, ele);
+				return null;
+			}
+			RuntimeBeanReference ref = new RuntimeBeanReference(refName, toParent);
+			ref.setSource(extractSource(ele));
+			return ref;
+		}
+		else if (nodeNameEquals(ele, IDREF_ELEMENT)) {
+			return parseIdRefElement(ele);
+		}
+		else if (nodeNameEquals(ele, VALUE_ELEMENT)) {
+			return parseValueElement(ele, defaultValueType);
+		}
+		else if (nodeNameEquals(ele, NULL_ELEMENT)) {
+			// It's a distinguished null value. Let's wrap it in a TypedStringValue
+			// object in order to preserve the source location.
+			TypedStringValue nullHolder = new TypedStringValue(null);
+			nullHolder.setSource(extractSource(ele));
+			return nullHolder;
+		}
+		else if (nodeNameEquals(ele, ARRAY_ELEMENT)) {
+			return parseArrayElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, LIST_ELEMENT)) {
+			return parseListElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, SET_ELEMENT)) {
+			return parseSetElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, MAP_ELEMENT)) {
+			return parseMapElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, PROPS_ELEMENT)) {
+			return parsePropsElement(ele);
+		}
+		else {
+			error(&quot;Unknown property sub-element: [&quot; + ele.getNodeName() + &quot;]&quot;, ele);
+			return null;
+		}
+	}
+</code></pre>
+<h3 id="2-property元素">2. property元素</h3>
+<h4 id="21-实例">2.1 实例</h4>
+<pre><code>&lt;bean id=&quot;studentService&quot; class=&quot;org.springframework.core.service.StudentService&quot;&gt;
+    &lt;property name=&quot;name&quot; value=&quot;chenssy&quot;/&gt;
+    &lt;property name=&quot;age&quot; value=&quot;18&quot;/&gt;
+&lt;/bean&gt;
+</code></pre>
+<h4 id="22-parsepropertyelements">2.2 parsePropertyElements</h4>
+<ul>
+<li>对于property子元素的解析，调用parsePropertyElements方法</li>
+</ul>
+<pre><code>/**
+	 * Parse property sub-elements of the given bean element.
+	 */
+	public void parsePropertyElements(Element beanEle, BeanDefinition bd) {
+		NodeList nl = beanEle.getChildNodes();
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, PROPERTY_ELEMENT)) {
+				parsePropertyElement((Element) node, bd);
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>遍历提取所有property的子元素，然后调用#parsePropertyElement进行解析</li>
+</ul>
+<pre><code>/**
+	 * Parse a property element.
+	 */
+	public void parsePropertyElement(Element ele, BeanDefinition bd) {
+		//获取name属性值
+		String propertyName = ele.getAttribute(NAME_ATTRIBUTE);
+		if (!StringUtils.hasLength(propertyName)) {
+			error(&quot;Tag 'property' must have a 'name' attribute&quot;, ele);
+			return;
+		}
+		this.parseState.push(new PropertyEntry(propertyName));
+		try {
+			//如果存在相同的name，报错
+			if (bd.getPropertyValues().contains(propertyName)) {
+				error(&quot;Multiple 'property' definitions for property '&quot; + propertyName + &quot;'&quot;, ele);
+				return;
+			}
+			//解析属性值
+			Object val = parsePropertyValue(ele, bd, propertyName);
+			//构造PropertyValue实例对象
+			PropertyValue pv = new PropertyValue(propertyName, val);
+			//解析meta标签
+			parseMetaElements(ele, pv);
+			pv.setSource(extractSource(ele));
+			//设置到PropertyValues集合中
+			bd.getPropertyValues().addPropertyValue(pv);
+		}
+		finally {
+			this.parseState.pop();
+		}
+	}
+</code></pre>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1constructor-arg">1.constructor-arg</a>
+<ul>
+<li><a href="#12-parseconstructorargelements">1.2 parseConstructorArgElements</a></li>
+<li><a href="#13-parseconstructorargelement">1.3 parseConstructorArgElement</a></li>
+<li><a href="#14-parsepropertyvalue">1.4 parsePropertyValue</a></li>
+<li><a href="#15-parsepropertysubelement">1.5 parsePropertySubElement</a></li>
+</ul>
+</li>
+<li><a href="#2-property%E5%85%83%E7%B4%A0">2. property元素</a>
+<ul>
+<li><a href="#21-%E5%AE%9E%E4%BE%8B">2.1 实例</a></li>
+<li><a href="#22-parsepropertyelements">2.2 parsePropertyElements</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-metalookup-methodreplace-method">
+              <h3 class="post-title">
+                IoC 之解析 &lt;bean&gt; 标签：meta、lookup-method、replace-method
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

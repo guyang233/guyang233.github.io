@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://guyang233.github.io</id>
     <title>Gridea</title>
-    <updated>2020-03-22T07:39:38.063Z</updated>
+    <updated>2020-03-25T16:55:38.141Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://guyang233.github.io"/>
     <link rel="self" href="https://guyang233.github.io/atom.xml"/>
@@ -10,6 +10,1037 @@
     <logo>https://guyang233.github.io/images/avatar.png</logo>
     <icon>https://guyang233.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, Gridea</rights>
+    <entry>
+        <title type="html"><![CDATA[IoC 之注册解析的 BeanDefinitions]]></title>
+        <id>https://guyang233.github.io/post/ioc-zhi-jie-xi-zi-ding-yi-biao-qian</id>
+        <link href="https://guyang233.github.io/post/ioc-zhi-jie-xi-zi-ding-yi-biao-qian">
+        </link>
+        <updated>2020-03-25T15:11:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>DefaultBeanDefinitionDocumentReader的#processBeanDefinition方法，完成bean标签的解析的核心工作</li>
+</ul>
+<pre><code>/**
+	 * Process the given bean element, parsing the bean definition
+	 * and registering it with the registry.
+	 */
+	protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate delegate) {
+		//进行Bean标签解析
+		//如果解析成功，返回BeanDefinitionHolder对象，而BeanDefinitionHolder为name和alias的BeanDefinition 对象
+		//若果解析失败，返回null
+		BeanDefinitionHolder bdHolder = delegate.parseBeanDefinitionElement(ele);
+		if (bdHolder != null) {
+			//进行自定义标签的解析
+			bdHolder = delegate.decorateBeanDefinitionIfRequired(ele, bdHolder);
+			try {
+				//进行BeanDefinition注册
+				// Register the final decorated instance.
+				BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());
+			}
+			catch (BeanDefinitionStoreException ex) {
+				getReaderContext().error(&quot;Failed to register bean definition with name '&quot; +
+						bdHolder.getBeanName() + &quot;'&quot;, ele, ex);
+			}
+			//发出响应事件，通知相关的通知器，已完成对该Bean标签的解析
+			// Send registration event.
+			getReaderContext().fireComponentRegistered(new BeanComponentDefinition(bdHolder));
+		}
+	}
+</code></pre>
+<ul>
+<li>解析工作分为三步
+<ul>
+<li>1、解析默认标签</li>
+<li>2、解析默认标签后，解析自定义标签</li>
+<li>3、注册解析后的BeanDefinition</li>
+</ul>
+</li>
+<li>接下来的工作就是讲BeanDefinition进行注册</li>
+</ul>
+<h3 id="1-beandefinitionreaderutils">1、 BeanDefinitionReaderUtils</h3>
+<ul>
+<li>注册BeanDefinition，由BeanDefinitionReaderUtils.registerBeanDefinition方法完成</li>
+</ul>
+<pre><code>/**
+	 * Register the given bean definition with the given bean factory.
+	 * @param definitionHolder the bean definition including name and aliases
+	 * @param registry the bean factory to register with
+	 * @throws BeanDefinitionStoreException if registration failed
+	 */
+	public static void registerBeanDefinition(
+			BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
+			throws BeanDefinitionStoreException {
+
+		//注册beanName
+		// Register bean definition under primary name.
+		String beanName = definitionHolder.getBeanName();
+		registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
+
+		//注册alias
+		// Register aliases for bean name, if any.
+		String[] aliases = definitionHolder.getAliases();
+		if (aliases != null) {
+			for (String alias : aliases) {
+				registry.registerAlias(beanName, alias);
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>首先通过beanName注册BeanDefinition</li>
+<li>然后通过注册别名alias和beanName的映射</li>
+</ul>
+<h3 id="2-beandefinitionregistry">2、BeanDefinitionRegistry</h3>
+<ul>
+<li>BeanDefinition的注册，由BeanDefinitionRegistry定义</li>
+</ul>
+<h4 id="21-通过beanname注册">2.1 通过BeanName注册</h4>
+<pre><code>@Override
+	public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
+			throws BeanDefinitionStoreException {
+
+		//判断BeanName不为空
+		Assert.hasText(beanName, &quot;Bean name must not be empty&quot;);
+		//判断BeanDefinition不为null
+		Assert.notNull(beanDefinition, &quot;BeanDefinition must not be null&quot;);
+
+		//校验BeanDefinition
+		if (beanDefinition instanceof AbstractBeanDefinition) {
+			try {
+				((AbstractBeanDefinition) beanDefinition).validate();
+			}
+			catch (BeanDefinitionValidationException ex) {
+				throw new BeanDefinitionStoreException(beanDefinition.getResourceDescription(), beanName,
+						&quot;Validation of bean definition failed&quot;, ex);
+			}
+		}
+
+		//从缓存中通BeanName获取BeanDefinition
+		BeanDefinition existingDefinition = this.beanDefinitionMap.get(beanName);
+		//如果BeanDefinition存在
+		if (existingDefinition != null) {
+			//判断是否允许覆盖，不允许的话直接抛出BeanDefinition覆盖异常
+			if (!isAllowBeanDefinitionOverriding()) {
+				throw new BeanDefinitionOverrideException(beanName, beanDefinition, existingDefinition);
+			}
+			//允许覆盖，判断已经存在的role和要注册的role的代销，小于的话打印info日志
+			else if (existingDefinition.getRole() &lt; beanDefinition.getRole()) {
+				// e.g. was ROLE_APPLICATION, now overriding with ROLE_SUPPORT or ROLE_INFRASTRUCTURE
+				if (logger.isInfoEnabled()) {
+					logger.info(&quot;Overriding user-defined bean definition for bean '&quot; + beanName +
+							&quot;' with a framework-generated bean definition: replacing [&quot; +
+							existingDefinition + &quot;] with [&quot; + beanDefinition + &quot;]&quot;);
+				}
+			}
+			//允许覆盖，判断已经存在的role和要注册的role的代销，等于的话打印debug日志
+			else if (!beanDefinition.equals(existingDefinition)) {
+				if (logger.isDebugEnabled()) {
+					logger.debug(&quot;Overriding bean definition for bean '&quot; + beanName +
+							&quot;' with a different definition: replacing [&quot; + existingDefinition +
+							&quot;] with [&quot; + beanDefinition + &quot;]&quot;);
+				}
+			}
+			//其他，打印debug日志
+			else {
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Overriding bean definition for bean '&quot; + beanName +
+							&quot;' with an equivalent definition: replacing [&quot; + existingDefinition +
+							&quot;] with [&quot; + beanDefinition + &quot;]&quot;);
+				}
+			}
+			//允许覆盖，直接覆盖原有的BeanDefinition到beanDefinitionMap中
+			this.beanDefinitionMap.put(beanName, beanDefinition);
+		}
+		//如果不存在
+		else {
+			//检测创建Bean阶段是否已经开启，如果开启了需要对beanDefinition进行并发控制
+			if (hasBeanCreationStarted()) {
+				// Cannot modify startup-time collection elements anymore (for stable iteration)
+				synchronized (this.beanDefinitionMap) {
+					//beanDefinitionMap为全局变量，避免并发情况
+					//将beanName和BeanDefinition放入beanDefinitionMap中
+					this.beanDefinitionMap.put(beanName, beanDefinition);
+					List&lt;String&gt; updatedDefinitions = new ArrayList&lt;&gt;(this.beanDefinitionNames.size() + 1);
+					updatedDefinitions.addAll(this.beanDefinitionNames);
+					updatedDefinitions.add(beanName);
+					this.beanDefinitionNames = updatedDefinitions;
+					//从manualSingletonNames 中移除beanName
+					removeManualSingletonName(beanName);
+				}
+			}
+			else {
+				// Still in startup registration phase
+				//添加BeanDefinition到BeanDefinitionMap中
+				this.beanDefinitionMap.put(beanName, beanDefinition);
+				this.beanDefinitionNames.add(beanName);
+				//从manualSingletonNames 中移除beanName
+				removeManualSingletonName(beanName);
+			}
+			this.frozenBeanDefinitionNames = null;
+		}
+
+		//重新设置BeanName对应的缓存
+		if (existingDefinition != null || containsSingleton(beanName)) {
+			resetBeanDefinition(beanName);
+		}
+	}
+</code></pre>
+<ul>
+<li>首先判断beanName和BeanDefinition不为空</li>
+<li>然后对BeanDefinition进行校验。该校验也是注册过程中的最后一次校验了，主要是对BeanDefinition的methodOverrides属性进行校验</li>
+<li>根据BeanName从缓存中获取BeanDefinition</li>
+<li>缓存中存在，判断是否允许覆盖，不允许覆盖直接抛出异常，允许的话直接覆盖</li>
+<li>若缓存中没有指定BeanName的BeanDefinition，则判断当前是否已经开始了Bean的创建阶段，如果是的话，需要对BeanDefinitionMap进行加锁并发控制，否则直接设置就行</li>
+<li>若缓存中存在该BeanName或者单例Bean集合中存在该BeanName，则调用方法来进行清除缓存</li>
+<li>核心就是将beanName和对应的BeanDefinition存放进beanDefinitionMap中，key是beanName，value是BeanDefinition</li>
+</ul>
+<h4 id="22-注册alias和beanname的映射">2.2 注册alias和beanName的映射</h4>
+<pre><code>@Override
+	public void registerAlias(String name, String alias) {
+		//校验name 和 alias
+		Assert.hasText(name, &quot;'name' must not be empty&quot;);
+		Assert.hasText(alias, &quot;'alias' must not be empty&quot;);
+		synchronized (this.aliasMap) {
+			//name == alias去掉alias
+			if (alias.equals(name)) {
+				this.aliasMap.remove(alias);
+				if (logger.isDebugEnabled()) {
+					logger.debug(&quot;Alias definition '&quot; + alias + &quot;' ignored since it points to same name&quot;);
+				}
+			}
+			else {
+				String registeredName = this.aliasMap.get(alias);
+				//已经存在
+				if (registeredName != null) {
+					//相同，则return 无需重复注册
+					if (registeredName.equals(name)) {
+						// An existing alias - no need to re-register
+						return;
+					}
+					//是否允许覆盖
+					if (!allowAliasOverriding()) {
+						//不允许覆盖直接抛出浴场
+						throw new IllegalStateException(&quot;Cannot define alias '&quot; + alias + &quot;' for name '&quot; +
+								name + &quot;': It is already registered for name '&quot; + registeredName + &quot;'.&quot;);
+					}
+					if (logger.isDebugEnabled()) {
+						logger.debug(&quot;Overriding alias '&quot; + alias + &quot;' definition for registered name '&quot; +
+								registeredName + &quot;' with new target name '&quot; + name + &quot;'&quot;);
+					}
+				}
+				//校验，是否循环指向
+				checkForAliasCircle(name, alias);
+				//注册alias
+				this.aliasMap.put(alias, name);
+				if (logger.isTraceEnabled()) {
+					logger.trace(&quot;Alias definition '&quot; + alias + &quot;' registered for name '&quot; + name + &quot;'&quot;);
+				}
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>注册alias和注册beanName差不多。</li>
+<li>调用的#checkForAliasCircle方法来进行循环检测</li>
+</ul>
+<pre><code>/**
+	 * Check whether the given name points back to the given alias as an alias
+	 * in the other direction already, catching a circular reference upfront
+	 * and throwing a corresponding IllegalStateException.
+	 * @param name the candidate name
+	 * @param alias the candidate alias
+	 * @see #registerAlias
+	 * @see #hasAlias
+	 */
+	protected void checkForAliasCircle(String name, String alias) {
+		if (hasAlias(alias, name)) {
+			throw new IllegalStateException(&quot;Cannot register alias '&quot; + alias +
+					&quot;' for name '&quot; + name + &quot;': Circular reference - '&quot; +
+					name + &quot;' is a direct or indirect alias for '&quot; + alias + &quot;' already&quot;);
+		}
+	}
+
+
+/**
+	 * Determine whether the given name has the given alias registered.
+	 * @param name the name to check
+	 * @param alias the alias to look for
+	 * @since 4.2.1
+	 */
+	public boolean hasAlias(String name, String alias) {
+		for (Map.Entry&lt;String, String&gt; entry : this.aliasMap.entrySet()) {
+			String registeredName = entry.getValue();
+			if (registeredName.equals(name)) {
+				String registeredAlias = entry.getKey();
+				if (registeredAlias.equals(alias) || hasAlias(registeredAlias, alias)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+</code></pre>
+<p>-如果name、alias分别为1、 3 , 则构成（1， 3）的映射。假如，此时集合中存在（A,1）和（3，A）的映射，意味着出现循环指向的情况。抛出异常</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[IoC 之解析 <bean> 标签：解析自定义标签]]></title>
+        <id>https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-jie-xi-zi-ding-yi-biao-qian</id>
+        <link href="https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-jie-xi-zi-ding-yi-biao-qian">
+        </link>
+        <updated>2020-03-25T14:57:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>解析Bean标签的过程
+<ul>
+<li>首先调用#parseBeanDefinitionElement方法来进行<bean>标签的解析</li>
+<li>如果解析成功（返回bdHolder != null），调用#decorateBeanDefinitionIfRequired方法，完成自定义标签元素的解析</li>
+</ul>
+</li>
+</ul>
+<h3 id="1-decoratebeandefinitionifrequired">1. decorateBeanDefinitionIfRequired</h3>
+<pre><code>/**
+	 * Decorate the given bean definition through a namespace handler, if applicable.
+	 * @param ele the current element
+	 * @param originalDef the current bean definition
+	 * @param containingBd the containing bean definition (if any)
+	 * @return the decorated bean definition
+	 */
+	public BeanDefinitionHolder decorateBeanDefinitionIfRequired(
+			Element ele, BeanDefinitionHolder originalDef, @Nullable BeanDefinition containingBd) {
+
+		BeanDefinitionHolder finalDefinition = originalDef;
+
+		//遍历属性，查看是否有适用于装饰的属性
+		// Decorate based on custom attributes first.
+		NamedNodeMap attributes = ele.getAttributes();
+		for (int i = 0; i &lt; attributes.getLength(); i++) {
+			Node node = attributes.item(i);
+			finalDefinition = decorateIfRequired(node, finalDefinition, containingBd);
+		}
+
+		//遍历子节点，查看是否有适用于修饰的子节点
+		// Decorate based on custom nested elements.
+		NodeList children = ele.getChildNodes();
+		for (int i = 0; i &lt; children.getLength(); i++) {
+			Node node = children.item(i);
+			if (node.getNodeType() == Node.ELEMENT_NODE) {
+				finalDefinition = decorateIfRequired(node, finalDefinition, containingBd);
+			}
+		}
+		return finalDefinition;
+	}
+</code></pre>
+<ul>
+<li>都是遍历，前者遍历的是属性（attributes），后者遍历的是子节点（childNodes）。最终调用的都是#decorateIfRequired方法，装饰对应的节点（Node）</li>
+</ul>
+<h3 id="2-decorateifrequired">2. decorateIfRequired</h3>
+<ul>
+<li>#decorateIfRequired方法，装饰对应的节点（node）</li>
+</ul>
+<pre><code>/**
+	 * Decorate the given bean definition through a namespace handler,
+	 * if applicable.
+	 * @param node the current child node
+	 * @param originalDef the current bean definition
+	 * @param containingBd the containing bean definition (if any)
+	 * @return the decorated bean definition
+	 */
+	public BeanDefinitionHolder decorateIfRequired(
+			Node node, BeanDefinitionHolder originalDef, @Nullable BeanDefinition containingBd) {
+
+		//获取自定义命名的空间
+		String namespaceUri = getNamespaceURI(node);
+		//过滤掉默认命名的标签
+		if (namespaceUri != null &amp;&amp; !isDefaultNamespace(namespaceUri)) {
+			//获取相应的处理器
+			NamespaceHandler handler = this.readerContext.getNamespaceHandlerResolver().resolve(namespaceUri);
+			if (handler != null) {
+				//进行装饰处理
+				BeanDefinitionHolder decorated =
+						handler.decorate(node, originalDef, new ParserContext(this.readerContext, this, containingBd));
+				if (decorated != null) {
+					return decorated;
+				}
+			}
+			else if (namespaceUri.startsWith(&quot;http://www.springframework.org/schema/&quot;)) {
+				error(&quot;Unable to locate Spring NamespaceHandler for XML schema namespace [&quot; + namespaceUri + &quot;]&quot;, node);
+			}
+			else {
+				// A custom namespace, not to be handled by Spring - maybe &quot;xml:...&quot;.
+				if (logger.isDebugEnabled()) {
+					logger.debug(&quot;No Spring NamespaceHandler found for XML schema namespace [&quot; + namespaceUri + &quot;]&quot;);
+				}
+			}
+		}
+		return originalDef;
+	}
+</code></pre>
+<ul>
+<li>首先获取自定义标签的命名空间</li>
+<li>如果不是默认的命名空间，根据该命名空间获取相应的处理器</li>
+<li>如果处理器存在，则进行装饰处理</li>
+</ul>
+<h3 id="3-小结">3. 小结</h3>
+<ul>
+<li>解析BeanDefinition的 入口在DefaultBeanDefinitionDocumentReader的#parseBeanDefinitions方法。该方法会根据命令空间来判断标签是默认标签还是自定义标签。其中
+<ul>
+<li>默认标签：由#parseDefaultElement方法来进行实现解析</li>
+<li>自定义标签：由BeanDefinitionParserDelegate的#parseCustomElement来实现解析</li>
+</ul>
+</li>
+<li>默认的标签中，会根据标签的名称的不同进行import、alias、bean、beans四大标签进行处理。其中bean标签的解析为核心，它由#processBeanDefinition方法来实现解析
+<ul>
+<li>processBeanDefinition方法，开始进入解析核心工作，分为三步
+<ul>
+<li>1、解析默认标签的默认标签，BeanDefinitionParserDelegate#parseBeanDefinitionElement方法，该方法会依次解析<bean>标签的属性、各个子元素，解析完成之后返回一个GenericBeanDefinition 实例对象</li>
+<li>2、解析默认标签下面的自定义标签BeanDefinitionParserDelegate#decorateBeanDefinitionIfRequired方法</li>
+<li>3、注册解析的BeanDefinition， #doRegisterBeanDefinitions方法</li>
+<li></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[IoC 之解析 <bean> 标签：constructor-arg、property、qualifier]]></title>
+        <id>https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-constructor-argpropertyqualifier</id>
+        <link href="https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-constructor-argpropertyqualifier">
+        </link>
+        <updated>2020-03-23T15:05:04.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="1constructor-arg">1.constructor-arg</h3>
+<pre><code>public class StudentService {
+
+    private String name;
+
+    private Integer age;
+
+    private BookService bookService;
+
+    StudentService(String name, Integer age, BookService bookService){
+
+        this.name = name;
+
+        this.age = age;
+
+        this.bookService = bookService;
+
+    }
+
+}
+
+
+&lt;bean id=&quot;bookService&quot; class=&quot;org.springframework.core.service.BookService&quot;/&gt;
+
+&lt;bean id=&quot;studentService&quot; class=&quot;org.springframework.core.service.StudentService&quot;&gt;
+    &lt;constructor-arg index=&quot;0&quot; value=&quot;chenssy&quot;/&gt;
+    &lt;constructor-arg name=&quot;age&quot; value=&quot;100&quot;/&gt;
+    &lt;constructor-arg name=&quot;bookService&quot; ref=&quot;bookService&quot;/&gt;
+&lt;/bean&gt;
+</code></pre>
+<ul>
+<li>StudentService 定义一个构造函数，配置文件中使用constructor-arg元素对其配置，该元素可以实现对StudentService自动寻找构造函数，并在初始化的时候将值作为参数进行设置</li>
+</ul>
+<h4 id="12-parseconstructorargelements">1.2 parseConstructorArgElements</h4>
+<ul>
+<li>调用#parseConstructorArgElements方法来对constructor-arg元素进行解析</li>
+</ul>
+<pre><code>	/**
+	 * Parse constructor-arg sub-elements of the given bean element.
+	 */
+	public void parseConstructorArgElements(Element beanEle, BeanDefinition bd) {
+		NodeList nl = beanEle.getChildNodes();
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, CONSTRUCTOR_ARG_ELEMENT)) {
+				parseConstructorArgElement((Element) node, bd);
+			}
+		}
+	}
+
+</code></pre>
+<ul>
+<li>遍历所有的子元素，如果子元素为constructor-arg， 则调用parseConstructorArgElement方法进行解析</li>
+</ul>
+<h4 id="13-parseconstructorargelement">1.3 parseConstructorArgElement</h4>
+<pre><code>/**
+	 * Parse a constructor-arg element.
+	 */
+	public void parseConstructorArgElement(Element ele, BeanDefinition bd) {
+		//提取index、type、name的属性值
+		String indexAttr = ele.getAttribute(INDEX_ATTRIBUTE);
+		String typeAttr = ele.getAttribute(TYPE_ATTRIBUTE);
+		String nameAttr = ele.getAttribute(NAME_ATTRIBUTE);
+		//如果有index
+		if (StringUtils.hasLength(indexAttr)) {
+			try {
+				int index = Integer.parseInt(indexAttr);
+				if (index &lt; 0) {
+					error(&quot;'index' cannot be lower than 0&quot;, ele);
+				}
+				else {
+					try {
+						this.parseState.push(new ConstructorArgumentEntry(index));
+						//解析ele对应的属性元素
+						Object value = parsePropertyValue(ele, bd, null);
+						//根据解析的元素属性，构造一个ValueHolder对象
+						ConstructorArgumentValues.ValueHolder valueHolder = new ConstructorArgumentValues.ValueHolder(value);
+						if (StringUtils.hasLength(typeAttr)) {
+							valueHolder.setType(typeAttr);
+						}
+						if (StringUtils.hasLength(nameAttr)) {
+							valueHolder.setName(nameAttr);
+						}
+						valueHolder.setSource(extractSource(ele));
+						//不允许重复指定相同参数
+						if (bd.getConstructorArgumentValues().hasIndexedArgumentValue(index)) {
+							error(&quot;Ambiguous constructor-arg entries for index &quot; + index, ele);
+						}
+						else {
+							bd.getConstructorArgumentValues().addIndexedArgumentValue(index, valueHolder);
+						}
+					}
+					finally {
+						this.parseState.pop();
+					}
+				}
+			}
+			catch (NumberFormatException ex) {
+				error(&quot;Attribute 'index' of tag 'constructor-arg' must be an integer&quot;, ele);
+			}
+		}
+		else {
+			try {
+				this.parseState.push(new ConstructorArgumentEntry());
+				Object value = parsePropertyValue(ele, bd, null);
+				ConstructorArgumentValues.ValueHolder valueHolder = new ConstructorArgumentValues.ValueHolder(value);
+				if (StringUtils.hasLength(typeAttr)) {
+					valueHolder.setType(typeAttr);
+				}
+				if (StringUtils.hasLength(nameAttr)) {
+					valueHolder.setName(nameAttr);
+				}
+				valueHolder.setSource(extractSource(ele));
+				bd.getConstructorArgumentValues().addGenericArgumentValue(valueHolder);
+			}
+			finally {
+				this.parseState.pop();
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>
+<p>首先获取index、type、name三个属性值。然后根据是否存在index来区分。执行后续逻辑。其实两者逻辑都差不多</p>
+<ul>
+<li>构造ConstructorArgumentEntry对象，放入ParseState队列中。ConstructorArgumentEntry表示构造函数的参数</li>
+<li>调用#parsePropertyValue方法来解析标签元素，返回属性值</li>
+<li>构造ValueHolder对象，设置type和name</li>
+<li>最后将ValueHolder对象添加到indexedArgumentValues集合中</li>
+</ul>
+</li>
+<li>
+<p>无index的逻辑和有index 的处理逻辑差不多，只是有几点不同</p>
+<ul>
+<li>无index的ConstructorArgumentEntry对象调用的是无参函数</li>
+<li>最后将GenericArgumentValues集合中</li>
+</ul>
+</li>
+</ul>
+<h4 id="14-parsepropertyvalue">1.4 parsePropertyValue</h4>
+<pre><code>/**
+	 * Get the value of a property element. May be a list etc.
+	 * Also used for constructor arguments, &quot;propertyName&quot; being null in this case.
+	 */
+	@Nullable
+	public Object parsePropertyValue(Element ele, BeanDefinition bd, @Nullable String propertyName) {
+		String elementName = (propertyName != null ?
+				&quot;&lt;property&gt; element for property '&quot; + propertyName + &quot;'&quot; :
+				&quot;&lt;constructor-arg&gt; element&quot;);
+
+		//查找子节点中是否含ref、value、list等元素
+		// Should only have one child element: ref, value, list, etc.
+		NodeList nl = ele.getChildNodes();
+		Element subElement = null;
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			//跳过description和meta标签
+			if (node instanceof Element &amp;&amp; !nodeNameEquals(node, DESCRIPTION_ELEMENT) &amp;&amp;
+					!nodeNameEquals(node, META_ELEMENT)) {
+				// Child element is what we're looking for.
+				if (subElement != null) {
+					error(elementName + &quot; must not contain more than one sub-element&quot;, ele);
+				}
+				else {
+					subElement = (Element) node;
+				}
+			}
+		}
+		//是否有ref属性
+		boolean hasRefAttribute = ele.hasAttribute(REF_ATTRIBUTE);
+		//是否有value属性
+		boolean hasValueAttribute = ele.hasAttribute(VALUE_ATTRIBUTE);
+		//同时存在，发生冲突
+		if ((hasRefAttribute &amp;&amp; hasValueAttribute) ||
+				((hasRefAttribute || hasValueAttribute) &amp;&amp; subElement != null)) {
+			error(elementName +
+					&quot; is only allowed to contain either 'ref' attribute OR 'value' attribute OR sub-element&quot;, ele);
+		}
+
+		//将ref属性值构造为RuntimeBeanReference对象
+		if (hasRefAttribute) {
+			String refName = ele.getAttribute(REF_ATTRIBUTE);
+			if (!StringUtils.hasText(refName)) {
+				error(elementName + &quot; contains empty 'ref' attribute&quot;, ele);
+			}
+			RuntimeBeanReference ref = new RuntimeBeanReference(refName);
+			ref.setSource(extractSource(ele));
+			return ref;
+		}
+		//将value属性值构造为TypedStringValue对象
+		else if (hasValueAttribute) {
+			TypedStringValue valueHolder = new TypedStringValue(ele.getAttribute(VALUE_ATTRIBUTE));
+			valueHolder.setSource(extractSource(ele));
+			return valueHolder;
+		}
+		//解析子元素
+		else if (subElement != null) {
+			return parsePropertySubElement(subElement, bd);
+		}
+		else {
+			// Neither child element nor &quot;ref&quot; or &quot;value&quot; attribute found.
+			error(elementName + &quot; must specify a ref or value&quot;, ele);
+			return null;
+		}
+	}
+
+</code></pre>
+<ul>
+<li>提取constructor-arg元素的子元素，ref属性值、value属性值，对其进行判断，以下两种情况是不允许存在的
+<ul>
+<li>ref属性值和value属性值时同时存在的</li>
+<li>存在ref或value并且有子元素存在</li>
+</ul>
+</li>
+<li>如果存在ref属性值，构造为 RuntimeBeanReference实例对象</li>
+<li>如果存在value属性值，构造为TypedStringValue 实例对象</li>
+<li>如果子元素不为空，调用#parsePropertySubElement方法来解析子元素</li>
+</ul>
+<h4 id="15-parsepropertysubelement">1.5 parsePropertySubElement</h4>
+<ul>
+<li>如果constructor-arg中有子元素，调用#parsePropertySubElement方法来进行解析</li>
+</ul>
+<pre><code>	/**
+	 * Parse a value, ref or collection sub-element of a property or
+	 * constructor-arg element.
+	 * @param ele subelement of property element; we don't know which yet
+	 * @param bd the current bean definition (if any)
+	 * @param defaultValueType the default type (class name) for any
+	 * {@code &lt;value&gt;} tag that might be created
+	 */
+	@Nullable
+	public Object parsePropertySubElement(Element ele, @Nullable BeanDefinition bd, @Nullable String defaultValueType) {
+		if (!isDefaultNamespace(ele)) {
+			return parseNestedCustomElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, BEAN_ELEMENT)) {
+			BeanDefinitionHolder nestedBd = parseBeanDefinitionElement(ele, bd);
+			if (nestedBd != null) {
+				nestedBd = decorateBeanDefinitionIfRequired(ele, nestedBd, bd);
+			}
+			return nestedBd;
+		}
+		else if (nodeNameEquals(ele, REF_ELEMENT)) {
+			// A generic reference to any name of any bean.
+			String refName = ele.getAttribute(BEAN_REF_ATTRIBUTE);
+			boolean toParent = false;
+			if (!StringUtils.hasLength(refName)) {
+				// A reference to the id of another bean in a parent context.
+				refName = ele.getAttribute(PARENT_REF_ATTRIBUTE);
+				toParent = true;
+				if (!StringUtils.hasLength(refName)) {
+					error(&quot;'bean' or 'parent' is required for &lt;ref&gt; element&quot;, ele);
+					return null;
+				}
+			}
+			if (!StringUtils.hasText(refName)) {
+				error(&quot;&lt;ref&gt; element contains empty target attribute&quot;, ele);
+				return null;
+			}
+			RuntimeBeanReference ref = new RuntimeBeanReference(refName, toParent);
+			ref.setSource(extractSource(ele));
+			return ref;
+		}
+		else if (nodeNameEquals(ele, IDREF_ELEMENT)) {
+			return parseIdRefElement(ele);
+		}
+		else if (nodeNameEquals(ele, VALUE_ELEMENT)) {
+			return parseValueElement(ele, defaultValueType);
+		}
+		else if (nodeNameEquals(ele, NULL_ELEMENT)) {
+			// It's a distinguished null value. Let's wrap it in a TypedStringValue
+			// object in order to preserve the source location.
+			TypedStringValue nullHolder = new TypedStringValue(null);
+			nullHolder.setSource(extractSource(ele));
+			return nullHolder;
+		}
+		else if (nodeNameEquals(ele, ARRAY_ELEMENT)) {
+			return parseArrayElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, LIST_ELEMENT)) {
+			return parseListElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, SET_ELEMENT)) {
+			return parseSetElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, MAP_ELEMENT)) {
+			return parseMapElement(ele, bd);
+		}
+		else if (nodeNameEquals(ele, PROPS_ELEMENT)) {
+			return parsePropsElement(ele);
+		}
+		else {
+			error(&quot;Unknown property sub-element: [&quot; + ele.getNodeName() + &quot;]&quot;, ele);
+			return null;
+		}
+	}
+</code></pre>
+<h3 id="2-property元素">2. property元素</h3>
+<h4 id="21-实例">2.1 实例</h4>
+<pre><code>&lt;bean id=&quot;studentService&quot; class=&quot;org.springframework.core.service.StudentService&quot;&gt;
+    &lt;property name=&quot;name&quot; value=&quot;chenssy&quot;/&gt;
+    &lt;property name=&quot;age&quot; value=&quot;18&quot;/&gt;
+&lt;/bean&gt;
+</code></pre>
+<h4 id="22-parsepropertyelements">2.2 parsePropertyElements</h4>
+<ul>
+<li>对于property子元素的解析，调用parsePropertyElements方法</li>
+</ul>
+<pre><code>/**
+	 * Parse property sub-elements of the given bean element.
+	 */
+	public void parsePropertyElements(Element beanEle, BeanDefinition bd) {
+		NodeList nl = beanEle.getChildNodes();
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, PROPERTY_ELEMENT)) {
+				parsePropertyElement((Element) node, bd);
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>遍历提取所有property的子元素，然后调用#parsePropertyElement进行解析</li>
+</ul>
+<pre><code>/**
+	 * Parse a property element.
+	 */
+	public void parsePropertyElement(Element ele, BeanDefinition bd) {
+		//获取name属性值
+		String propertyName = ele.getAttribute(NAME_ATTRIBUTE);
+		if (!StringUtils.hasLength(propertyName)) {
+			error(&quot;Tag 'property' must have a 'name' attribute&quot;, ele);
+			return;
+		}
+		this.parseState.push(new PropertyEntry(propertyName));
+		try {
+			//如果存在相同的name，报错
+			if (bd.getPropertyValues().contains(propertyName)) {
+				error(&quot;Multiple 'property' definitions for property '&quot; + propertyName + &quot;'&quot;, ele);
+				return;
+			}
+			//解析属性值
+			Object val = parsePropertyValue(ele, bd, propertyName);
+			//构造PropertyValue实例对象
+			PropertyValue pv = new PropertyValue(propertyName, val);
+			//解析meta标签
+			parseMetaElements(ele, pv);
+			pv.setSource(extractSource(ele));
+			//设置到PropertyValues集合中
+			bd.getPropertyValues().addPropertyValue(pv);
+		}
+		finally {
+			this.parseState.pop();
+		}
+	}
+</code></pre>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[IoC 之解析 <bean> 标签：meta、lookup-method、replace-method]]></title>
+        <id>https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-metalookup-methodreplace-method</id>
+        <link href="https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-metalookup-methodreplace-method">
+        </link>
+        <updated>2020-03-23T13:59:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>解析Bean标签的基本属性之后，会依次调用BeanDefinitionParserDelegate的#parseMetaElements、#parseLookupOverrideSubElements、#parseReplacedMethodSubElements三个方法，分别对meta、lookup-method、replace-method元素进行解析。三个元素的作用如下
+<ul>
+<li>meta：元数据</li>
+<li>lookup-method：Spring动态改变bean里方法的实现，方法执行返回的对象，使用Spring内原有的这类对象替换，通过改变方法返回值来动态改变方法、内部实现使用cglib方法，重新生成子类，重写配置的方法和返回对象，达到动态改变的效果</li>
+<li>replace-method：Spring动态改变Bean里方法的实现，需要改变的方法，使用Spring内原有其他类（需要继承接口org.springframework.beans.factory.support.MethodReplacer）的逻辑，替换这个方法。通过改变方法执行逻辑来实现动态的改变方法</li>
+</ul>
+</li>
+</ul>
+<h3 id="1mate子元素">1.Mate子元素</h3>
+<ul>
+<li>Meta：元数据。当需要使用里面的信息时可以通过key获取</li>
+<li>meta所声明的key并不会在Bean中提现，只是一个额外的声明，当我们需要使用里面的信息时，通过调用BeanDefinition的#getAttribute方法来获取。子元素的解析过程：</li>
+</ul>
+<pre><code>/**
+	 * Parse the meta elements underneath the given element, if any.
+	 */
+	public void parseMetaElements(Element ele, BeanMetadataAttributeAccessor attributeAccessor) {
+		NodeList nl = ele.getChildNodes();
+		//遍历子节点
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			//&lt;meta key=&quot;special-data&quot; value=&quot;sprecial stragey&quot; /&gt;
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, META_ELEMENT)) {
+				Element metaElement = (Element) node;
+				String key = metaElement.getAttribute(KEY_ATTRIBUTE);
+				String value = metaElement.getAttribute(VALUE_ATTRIBUTE);
+				BeanMetadataAttribute attribute = new BeanMetadataAttribute(key, value);
+				attribute.setSource(extractSource(metaElement));
+				attributeAccessor.addMetadataAttribute(attribute);
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>解析过程比较简单，获取响应的key-value构建BeanMetadataAttribute对象，然后attributeAccessor.addMetadataAttribute(attribute);</li>
+</ul>
+<pre><code>AbstractBeanDefinition 继承 BeanMetadataAttributeAccessor 类
+BeanMetadataAttributeAccessor 继承 AttributeAccessorSupport 类。
+</code></pre>
+<h4 id="11-addmetadataattribute">1.1 addMetadataAttribute</h4>
+<ul>
+<li>调用BeanMetadataAttributeAccessor#addMetadataAttribute方法将BeanMetadataAttribute设置到BeanMetadataAttributeAccessor中</li>
+</ul>
+<pre><code>	/**
+	 * Add the given BeanMetadataAttribute to this accessor's set of attributes.
+	 * @param attribute the BeanMetadataAttribute object to register
+	 */
+	public void addMetadataAttribute(BeanMetadataAttribute attribute) {
+		super.setAttribute(attribute.getName(), attribute);
+	}
+
+</code></pre>
+<ul>
+<li>委托给父类AttributeAccessorSupport实现</li>
+</ul>
+<pre><code>	@Override
+	public void setAttribute(String name, @Nullable Object value) {
+		Assert.notNull(name, &quot;Name must not be null&quot;);
+		if (value != null) {
+			this.attributes.put(name, value);
+		}
+		else {
+			removeAttribute(name);
+		}
+	}
+</code></pre>
+<ul>
+<li>AttributeAccessorSupport是AttributeAccessor的实现者，AttributeAccessor接口定义了与其他对象的元数据进行连接和访问的约定，可以通过该接口对属性进行获取、设置和删除的操作</li>
+</ul>
+<h4 id="12-getattribute">1.2 getAttribute</h4>
+<ul>
+<li>设置元数据之后，可以通过BeanDefinition的#getAttribute来获取属性</li>
+</ul>
+<pre><code>	/** Map with String keys and Object values. */
+	private final Map&lt;String, Object&gt; attributes = new LinkedHashMap&lt;&gt;();
+
+
+@Override
+	@Nullable
+	public Object getAttribute(String name) {
+		Assert.notNull(name, &quot;Name must not be null&quot;);
+		return this.attributes.get(name);
+	}
+</code></pre>
+<h3 id="2lookup-method子元素">2.lookup-method子元素</h3>
+<ul>
+<li>lookup-method：获取器注入，是把一个方法声明为某种类型的bean但是实际要返回的bean是在配置文件里面配置的。该方法可以设计一些可插拔的功能上，解除程序的依赖</li>
+</ul>
+<pre><code>public interface Car {
+
+    void display();
+
+}
+
+public class Bmw implements Car{
+
+    @Override
+    public void display() {
+        System.out.println(&quot;我是 BMW&quot;);
+    }
+
+}
+
+public class Hongqi implements Car{
+
+    @Override
+    public void display() {
+        System.out.println(&quot;我是 hongqi&quot;);
+    }
+
+}
+
+public abstract class Display {
+
+    public void display(){
+        getCar().display();
+    }
+    
+    public abstract Car getCar();
+
+}
+
+public static void main(String[] args) {
+    ApplicationContext context = new ClassPathXmlApplicationContext(&quot;classpath:spring.xml&quot;);
+    Display display = (Display) context.getBean(&quot;display&quot;);
+    display.display();
+}
+
+
+-- xml配置内容
+
+&lt;bean id=&quot;display&quot; class=&quot;org.springframework.core.test1.Display&quot;&gt;
+    &lt;lookup-method name=&quot;getCar&quot; bean=&quot;hongqi&quot;/&gt;
+&lt;/bean&gt;
+</code></pre>
+<ul>
+<li>运行结果为</li>
+</ul>
+<pre><code>我是 hongqi
+
+</code></pre>
+<ul>
+<li>如果将bean的内容替换为bmw，运行结果为</li>
+</ul>
+<pre><code>我是 BMW
+
+</code></pre>
+<h4 id="21-parselookupoverridesubelements">2.1 parseLookupOverrideSubElements</h4>
+<ul>
+<li>上面的示例已经初步了解了lookup-method子元素提供的功能呢，其解析通过#parseLookupOverrideSubElements方法</li>
+</ul>
+<pre><code>	/**
+	 * Parse lookup-override sub-elements of the given bean element.
+	 */
+	public void parseLookupOverrideSubElements(Element beanEle, MethodOverrides overrides) {
+		NodeList nl = beanEle.getChildNodes();
+		//遍历子节点
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, LOOKUP_METHOD_ELEMENT)) {
+				Element ele = (Element) node;
+				String methodName = ele.getAttribute(NAME_ATTRIBUTE);
+				String beanRef = ele.getAttribute(BEAN_ELEMENT);
+				LookupOverride override = new LookupOverride(methodName, beanRef);
+				//添加到MethodOverrides中
+				override.setSource(extractSource(ele));
+				overrides.addOverride(override);
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>解析过程和meta标签的过程差不多，同样是解析name、bean来构造一个LookupOverride对象，然后添加到MethodOverrides中</li>
+</ul>
+<h3 id="3replace-method子元素">3.replace-method子元素</h3>
+<ul>
+<li>replace-method：可以在运行时调用新的方法替换现有的方法，还能动态的更新原有方法的逻辑</li>
+</ul>
+<pre><code>public class Method {
+
+    public void display(){
+        System.out.println(&quot;我是原始方法&quot;);
+    }
+
+}
+
+public class MethodReplace implements MethodReplacer {
+
+    @Override
+    public Object reimplement(Object obj, Method method, Object[] args) throws Throwable {
+        System.out.println(&quot;我是替换方法&quot;);
+        return null;
+    }
+
+}
+
+public static void main(String[] args) {
+    ApplicationContext context = new ClassPathXmlApplicationContext(&quot;classpath:spring.xml&quot;);
+    Method method = (Method) context.getBean(&quot;method&quot;);
+    method.display();
+}
+
+-- xml文件
+&lt;bean id=&quot;methodReplace&quot; class=&quot;org.springframework.core.test1.MethodReplace&quot;/&gt;
+
+&lt;bean id=&quot;method&quot; class=&quot;org.springframework.core.test1.Method&quot;/&gt;
+</code></pre>
+<ul>
+<li>运行结果为</li>
+</ul>
+<pre><code>我是原始方法
+</code></pre>
+<ul>
+<li>增加replace-method子元素</li>
+</ul>
+<pre><code>&lt;bean id=&quot;methodReplace&quot; class=&quot;org.springframework.core.test1.MethodReplace&quot;/&gt;
+
+&lt;bean id=&quot;method&quot; class=&quot;org.springframework.core.test1.Method&quot;&gt;
+
+    &lt;replaced-method name=&quot;display&quot; replacer=&quot;methodReplace&quot;/&gt;
+
+&lt;/bean&gt;
+</code></pre>
+<ul>
+<li>运行结果为</li>
+</ul>
+<pre><code>我是替换方法
+
+</code></pre>
+<h4 id="31-parsereplacedmethodsubelements">3.1 parseReplacedMethodSubElements</h4>
+<ul>
+<li>上面的示例展示了replace-method标签的作用，是调用#parseReplacedMethodSubElements方法来解析replace-method标签的</li>
+</ul>
+<pre><code>	/**
+	 * Parse replaced-method sub-elements of the given bean element.
+	 */
+	public void parseReplacedMethodSubElements(Element beanEle, MethodOverrides overrides) {
+		NodeList nl = beanEle.getChildNodes();
+		//遍历子节点
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, REPLACED_METHOD_ELEMENT)) {
+				Element replacedMethodEle = (Element) node;
+				String name = replacedMethodEle.getAttribute(NAME_ATTRIBUTE);
+				String callback = replacedMethodEle.getAttribute(REPLACER_ATTRIBUTE);
+				ReplaceOverride replaceOverride = new ReplaceOverride(name, callback);
+				// Look for arg-type match elements.
+				List&lt;Element&gt; argTypeEles = DomUtils.getChildElementsByTagName(replacedMethodEle, ARG_TYPE_ELEMENT);
+				for (Element argTypeEle : argTypeEles) {
+					String match = argTypeEle.getAttribute(ARG_TYPE_MATCH_ATTRIBUTE);
+					match = (StringUtils.hasText(match) ? match : DomUtils.getTextValue(argTypeEle));
+					if (StringUtils.hasText(match)) {
+						replaceOverride.addTypeIdentifier(match);
+					}
+				}
+				replaceOverride.setSource(extractSource(replacedMethodEle));
+				overrides.addOverride(replaceOverride);
+			}
+		}
+	}
+</code></pre>
+<h3 id="4总结">4.总结</h3>
+<ul>
+<li>主要是说明了lookup-method和replace-method两个子元素标签的作用以及解析</li>
+</ul>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[IoC 之解析 <bean> 标签：BeanDefinition]]></title>
         <id>https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-beandefinition</id>
@@ -1851,527 +2882,6 @@ protected int detectValidationMode(Resource resource) {
 </code></pre>
 <ul>
 <li>&lt;3&gt;处，如果发生CharConversionException异常，则为VALIDATION_AUTO模式</li>
-</ul>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[IoC之加载BeanDefinition]]></title>
-        <id>https://guyang233.github.io/post/ioc-zhi-jia-zai-beandefinition</id>
-        <link href="https://guyang233.github.io/post/ioc-zhi-jia-zai-beandefinition">
-        </link>
-        <updated>2020-03-01T14:21:40.000Z</updated>
-        <content type="html"><![CDATA[<pre><code>ClassPathResource resource = new ClassPathResource(&quot;bean.xml&quot;); // &lt;1&gt;
-DefaultListableBeanFactory factory = new DefaultListableBeanFactory(); // &lt;2&gt;
-XmlBeanDefinitionReader reader = new XmlBeanDefinitionReader(factory); // &lt;3&gt;
-reader.loadBeanDefinitions(resource); // &lt;4&gt;
-</code></pre>
-<ul>
-<li>这段代码是Spring编程式中使用IoC容器，可以判断IoC容器的使用过程
-<ul>
-<li>获取资源</li>
-<li>创建BeanFactory</li>
-<li>根据新创建的BeanFactory创建一个BeanDefinitionReader对象，该reader对象为资源解析器</li>
-<li>装载资源</li>
-</ul>
-</li>
-<li>整个过程分为三个步骤，资源定位、装载、注册
-<ul>
-<li>资源定位：我们一般用外部资源来描述Bean对象，所以在初始化IoC容器的第一步就是要定位外部资源。</li>
-<li>装载：装载就是BeanDefinition的载入，BeanDefinitionReader读取、解析Resource资源，也就是将用户定义的Bean表示成为IoC容器的内部数据结构，BeanDefinition</li>
-<li>在IoC容器内部中维护着一个BeanDefinitionMap的数据结构</li>
-<li>在配置文件中每一个<bean>都对应着一个BeanDefinition对象。BeanDefinitionReader，主要定义资源文件读取并转换为BeanDefinition的各个功能</li>
-<li>注册：向IoC容器注册在第二步解析好的BeanDefinition，这个过程是通过BeanDefinitionRegistry接口实现的，在IoC容器内部其实就是将第二过程解析得到的BeanDefinition注入到一个 HashMap容器中，IoC容器就是通过这个HashMap来维护这些BeanDefinition的</li>
-<li><img src="https://guyang233.github.io/post-images/1583108382024.png" alt="" loading="lazy">
-<ul>
-<li>在这里需要注意的一点是这个过程中并没有完成依赖注入（Bean创建），Bean创建是发生在应用的第一次调用#getBean方法，想容器索要Bean时</li>
-<li>当然我们饿可以通过设置预处理，即对某个Bean设置lazyinit = false属性，那么这个Bean的依赖注入就会在容器初始化的时候完成</li>
-<li>简单的说，其实上面的步骤的结果就是：XML Resource =&gt; XML Document =&gt; XML BeanDefinition</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-<h4 id="1-loadbeandefinitions">1、loadBeanDefinitions</h4>
-<ul>
-<li>资源定位之前说过，直接分析加载，<code>reader.loadBeanDefinitions(resource);</code>这句代码才是加载资源的真正实现，所以直接从该方法下手。</li>
-</ul>
-<pre><code>@Override
-public int loadBeanDefinitions(Resource resource) throws BeanDefinitionStoreException {
-		return loadBeanDefinitions(new EncodedResource(resource));
-	}
-</code></pre>
-<ul>
-<li>从指定的XML文件中加载Bean Definition，这里先会对reource 资源封装成EncodedResource对象，为什么需要封装成为EncodedResource呢，主要是为了对Resource进行编码，保证内容读取的正确性。</li>
-<li>然后又调用#loadBeanDefinitions方法来实现真正的逻辑</li>
-</ul>
-<pre><code>public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
-		Assert.notNull(encodedResource, &quot;EncodedResource must not be null&quot;);
-		if (logger.isTraceEnabled()) {
-			logger.trace(&quot;Loading XML bean definitions from &quot; + encodedResource);
-		}
-		//1、获取已经加载过得资源
-		Set&lt;EncodedResource&gt; currentResources = this.resourcesCurrentlyBeingLoaded.get();
-		if (currentResources == null) {
-			currentResources = new HashSet&lt;&gt;(4);
-			this.resourcesCurrentlyBeingLoaded.set(currentResources);
-		}
-		//将当前资源添加进去，如果资源已经存在，抛出异常
-		if (!currentResources.add(encodedResource)) {
-			throw new BeanDefinitionStoreException(
-					&quot;Detected cyclic loading of &quot; + encodedResource + &quot; - check your import definitions!&quot;);
-		}
-		try {
-			//2、从 EncodedResource 获取封装的 Resource ，并从 Resource 中获取其中的 InputStream
-			InputStream inputStream = encodedResource.getResource().getInputStream();
-			try {
-				InputSource inputSource = new InputSource(inputStream);
-				if (encodedResource.getEncoding() != null) {
-					inputSource.setEncoding(encodedResource.getEncoding());
-				}
-				//执行加载
-				return doLoadBeanDefinitions(inputSource, encodedResource.getResource());
-			}
-			finally {
-				inputStream.close();
-			}
-		}
-		catch (IOException ex) {
-			throw new BeanDefinitionStoreException(
-					&quot;IOException parsing XML document from &quot; + encodedResource.getResource(), ex);
-		}
-		finally {
-			//3、从缓存中剔除资源
-			currentResources.remove(encodedResource);
-			if (currentResources.isEmpty()) {
-				this.resourcesCurrentlyBeingLoaded.remove();
-			}
-		}
-	}
-</code></pre>
-<ul>
-<li>1、 通过resourcesCurrentlyBeingLoaded.get()来获取已经加载过的资源，然后将encodedResource加入其中，如果已经存在该资源，抛出异常
-<ul>
-<li>为什么要这样做呢？Detected cyclic loading ，避免一个encodedResource在加载中，没有加载完成的时候又加载自身，从而导致死循环。</li>
-<li>因此在3的步骤时，资源加载完成后，要从缓存中剔除资源</li>
-</ul>
-</li>
-<li>2、 从EncodedResource获取封装的Resource资源，并从Resource中获取相应的InputStream，然后将InputStream封装为InputSource，最后调用#doLoadBeanDefinitions，执行整整的Bean Definition加载逻辑。</li>
-</ul>
-<pre><code>protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
-			throws BeanDefinitionStoreException {
-
-		try {
-            //获取XML DOCUMENT实例
-			Document doc = doLoadDocument(inputSource, resource);
-            //根据Document实例注册Bean信息
-			int count = registerBeanDefinitions(doc, resource);
-			if (logger.isDebugEnabled()) {
-				logger.debug(&quot;Loaded &quot; + count + &quot; bean definitions from &quot; + resource);
-			}
-			return count;
-		}
-		catch (BeanDefinitionStoreException ex) {
-			throw ex;
-		}
-		catch (SAXParseException ex) {
-			throw new XmlBeanDefinitionStoreException(resource.getDescription(),
-					&quot;Line &quot; + ex.getLineNumber() + &quot; in XML document from &quot; + resource + &quot; is invalid&quot;, ex);
-		}
-		catch (SAXException ex) {
-			throw new XmlBeanDefinitionStoreException(resource.getDescription(),
-					&quot;XML document from &quot; + resource + &quot; is invalid&quot;, ex);
-		}
-		catch (ParserConfigurationException ex) {
-			throw new BeanDefinitionStoreException(resource.getDescription(),
-					&quot;Parser configuration exception parsing XML from &quot; + resource, ex);
-		}
-		catch (IOException ex) {
-			throw new BeanDefinitionStoreException(resource.getDescription(),
-					&quot;IOException parsing XML document from &quot; + resource, ex);
-		}
-		catch (Throwable ex) {
-			throw new BeanDefinitionStoreException(resource.getDescription(),
-					&quot;Unexpected exception parsing XML document from &quot; + resource, ex);
-		}
-	}
-</code></pre>
-<ul>
-<li>在1处，调用doLoadDocument方法， 根据XML文件获取Document实例</li>
-<li>在2处，调用registerBeanDefinitions方法，根据Document来注册Bean Definition</li>
-</ul>
-<pre><code>/**
- * 获取 XML Document 实例
- *
- * Actually load the specified document using the configured DocumentLoader.
- * @param inputSource the SAX InputSource to read from
- * @param resource the resource descriptor for the XML file
- * @return the DOM Document
- * @throws Exception when thrown from the DocumentLoader
- * @see #setDocumentLoader
- * @see DocumentLoader#loadDocument
- */
-protected Document doLoadDocument(InputSource inputSource, Resource resource) throws Exception {
-	return this.documentLoader.loadDocument(inputSource, getEntityResolver(), this.errorHandler,
-			getValidationModeForResource(resource), isNamespaceAware());
-}
-</code></pre>
-<ul>
-<li>1、调用 #getValidationModeForResource(Resource resource) 方法，获取指定资源（xml）的验证模式</li>
-<li>2、调用 DocumentLoader#loadDocument(InputSource inputSource, EntityResolver entityResolver, ErrorHandler errorHandler, int validationMode, boolean namespaceAware) 方法，获取 XML Document 实例</li>
-</ul>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[二叉树遍历]]></title>
-        <id>https://guyang233.github.io/post/er-cha-shu-bian-li</id>
-        <link href="https://guyang233.github.io/post/er-cha-shu-bian-li">
-        </link>
-        <updated>2020-01-14T08:51:11.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="1-深度遍历">1、深度遍历</h3>
-<ul>
-<li>前序：根结点-----左子树-----右子树</li>
-<li>中序：左子树-----根结点-----右子树</li>
-<li>后序：左子树-----右子树-----根结点</li>
-</ul>
-<h3 id="2-广度遍历">2、广度遍历</h3>
-<ul>
-<li>层次遍历：只需要按照层次遍历即可</li>
-</ul>
-<h3 id="3-示例">3、示例</h3>
-<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578992143214.png" alt="" loading="lazy"></figure>
-<ul>
-<li>前序遍历：1、2、4、5、 7、 8、 3、 6
-<ul>
-<li>递归遍历</li>
-</ul>
-<pre><code>/**
- * 前序遍历
- */
-public void preOrderTraversal(TreeNode root){
-    if (root != null){
-        System.out.println(root.value);
-        preOrderTraversal(root.getLeft());
-        preOrderTraversal(root.getRight());
-    }
-}
-</code></pre>
-<ul>
-<li>非递归遍历</li>
-</ul>
-<pre><code>/**
- * 前序遍历2，非递归
- * 优先访问根结点，然后访问左子树和右子树
- * 当左子树不为空的时候，重复
- * 当左子树为空的时候，切换为右子树
- */
-public void preOrderTraversal2(TreeNode root){
-    LinkedList&lt;TreeNode&gt; linkedList = new LinkedList&lt;&gt;();
-    TreeNode pNode = root;
-    while(pNode != null || !linkedList.isEmpty()){
-        if (pNode !=null){
-            System.out.println(pNode.value);
-            linkedList.push(pNode);
-            pNode = pNode.left;
-        } else {
-            TreeNode node = linkedList.pop();
-            pNode = node.right;
-        }
-    }
-}
-</code></pre>
-</li>
-<li>中序遍历：4、 2、 7、 5、 8、 1、 3、 6
-<ul>
-<li>递归遍历</li>
-</ul>
-<pre><code>/**
- * 递归中序遍历
- */
-public void midOrderTraversal(TreeNode root){
-    if (root != null){
-        midOrderTraversal(root.getLeft());
-        System.out.println(root.value);
-        midOrderTraversal(root.getRight());
-    }
-}
-</code></pre>
-<ul>
-<li>非递归遍历</li>
-</ul>
-<pre><code>/**
- * 非递归前序遍历
- * 1、先是不断的去寻找左子树
- * 2、找到最左的第一个孩子没有左子树的结点
- * 3、输出节点（父结点的值），并且遍历该结点的右孩子
- * 4、遍历完右孩子之后，stack.pop()，是该结点的父结点
- * 5、重复上述步骤
- */
-public void midOrderTraversal2(TreeNode root){
-   LinkedList&lt;TreeNode&gt; stack = new LinkedList&lt;&gt;();
-   TreeNode pNode = root;
-   while (pNode !=null || !stack.isEmpty()){
-       if (pNode != null){
-           stack.push(pNode);
-           pNode = pNode.left;
-       } else {
-           TreeNode node = stack.pop();
-           System.out.println(node.value);
-           pNode = node.right;
-       }
-   }
-}
-</code></pre>
-<ul>
-<li>后序遍历：4、 7、 8、 5、 2、 6、 3、 1
-<ul>
-<li>递归遍历</li>
-</ul>
-<pre><code>/**
- * 递归后序遍历
- */
-public void postOrderTraversal(TreeNode root){
-    if (root != null){
-        midOrderTraversal(root.getLeft());
-        midOrderTraversal(root.getRight());
-        System.out.println(root.value);
-    }
-}
-</code></pre>
-<ul>
-<li>非递归遍历</li>
-</ul>
-<pre><code> /**
- * 递归后序遍历
- * 1、借助两个stack来实现
- * 2、判断root是否为空，不为空的话压入stack2
- * 3、判断左右子树，不为空的话压入stack1，压入的顺序是：左-&gt;右
- * 4、从stack1中按照先压入根，然后压入左，最后压入右
- * 5、逻辑中，根结点先被压入stack2中，然后从stack1中弹出右，压入stack2中，最后弹出左，压入stack2中，stack2中的顺序为：根-右-左
- * 6、依次弹出stack2中的结点。按照左-右-根的顺序
- */
-public void postOrderTraversal2(TreeNode root){
-   if (root != null){
-       LinkedList&lt;TreeNode&gt; stack1 = new LinkedList&lt;&gt;();
-       LinkedList&lt;TreeNode&gt; stack2 = new LinkedList&lt;&gt;();
-       stack1.push(root);
-       while (!stack1.isEmpty()){
-           root = stack1.pop();
-           stack2.push(root);
-           if (root.left != null){
-               stack1.push(root.left);
-           }
-           if (root.right != null){
-               stack1.push(root.right);
-           }
-       }
-       while (!stack2.isEmpty()){
-           System.out.println(stack2.pop().value);
-       }
-   }
-}
-</code></pre>
-</li>
-</ul>
-</li>
-<li>层次遍历</li>
-</ul>
-<pre><code>/**
-     * 层次遍历
-     * 1、先将root结点放进队列，出队列输出
-     * 2、将不为空的左右子树放进队列，出队列输出
-     * @param root 根结点
-     */
-    public void levelTraverse(TreeNode root){
-        TreeNode node;
-        if (root != null){
-            //初始化队列
-            LinkedList&lt;TreeNode&gt; queue = new LinkedList&lt;&gt;();
-            //根结点入队列
-            queue.offer(root);
-            while(!queue.isEmpty()){
-                //出队列
-                node = queue.poll();
-                System.out.println(node.value);
-                //左节点入队列
-                if (node.left != null){
-                    queue.offer(node.left);
-                }
-                //右节点入队列
-                if (node.right != null){
-                    queue.offer(node.right);
-                }
-            }
-        }
-    }
-</code></pre>
-<h3 id="4-二叉树的构建">4、二叉树的构建</h3>
-<ul>
-<li>前序遍历和中序遍历构建二叉树</li>
-<li>中序遍历和后续遍历构建二叉树</li>
-</ul>
-<pre><code>/**
-     *      * 1、前序和后序能够直接确定根节点
-     *      * 2、然后根据中序遍历能够确定左右子树
-     *      * 3、根据前序和后序能够确定左右子树的根结点
-     *      * 4、递归重复上述步骤
-     *      *
-     *      * 由前序遍历和中序遍历，或后序遍历和中序遍历推导简历二叉树
-     *      * @param preOrder 前序遍历的序列
-     *      * @param midOrder 中序遍历的序列
-     *      * @param preIndex 前序遍历开始位置
-     *      * @param midIndex 中序遍历开始位置
-     *      * @param count 节点数
-     */
-    public TreeNode(String preOrder, String midOrder, int preIndex, int midIndex, int count){
-        if (count &gt; 0){
-            //获取前序遍历根节点
-            char r = preOrder.charAt(preIndex);
-            //记录根结点在中序遍历序列的位置
-            int i = 0;
-            for (; i &lt; count; i++){
-                if (r == midOrder.charAt(i)){
-                    break;
-                }
-            }
-            TreeNode node = new TreeNode(Integer.parseInt(String.valueOf(r)));
-            //递归构造左右子树
-            node.left = new TreeNode(preOrder, midOrder, preIndex + 1, midIndex, i);
-            node.right = new TreeNode(preOrder, midOrder, preIndex + i +1, midIndex + i + 1, count - i -1);
-        }
-    }
-</code></pre>
-<ul>
-<li>完全二叉树的层次序列构建二叉树</li>
-</ul>
-<pre><code>   /**
-     * 完全二叉树的层次序列构建二叉树
-     * @param order 层次序列
-     * @param index 根结点位置
-     */
-    public TreeNode(String order, Integer index){
-        if (index &lt; order.length()){
-            TreeNode node = new TreeNode((int) order.charAt(index));
-            //建立左右子树
-            node.left = new TreeNode(order, 2 * index + 1);
-            node.right = new TreeNode(order, 2 * index + 2);
-        }
-    }
-</code></pre>
-<ul>
-<li>标明空子树的前序序列构建二叉树</li>
-</ul>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[数据结构-二叉树]]></title>
-        <id>https://guyang233.github.io/post/shu-ju-jie-gou-er-cha-shu</id>
-        <link href="https://guyang233.github.io/post/shu-ju-jie-gou-er-cha-shu">
-        </link>
-        <updated>2020-01-13T08:03:08.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="1-简介">1、简介</h3>
-<ul>
-<li>什么是二叉树
-<ul>
-<li>本身是有序树</li>
-<li>树中包含各个结点的度不能超过2，即只能是0,1,2<br>
-<img src="https://guyang233.github.io/post-images/1578902741017.gif" alt="" loading="lazy"></li>
-</ul>
-<h3 id="2-叉树的性质">2、叉树的性质</h3>
-<ul>
-<li>二叉树中，第i层最多有2的（i-1）次幂个结点</li>
-<li>如果二叉树的深度为K，那么此二叉树最多有2的K次幂减1个结点</li>
-<li>二叉树中，终端节点数（叶子节点数）为n0，度为2的结点数为n2，则n0 = n2 + 1。</li>
-</ul>
-</li>
-</ul>
-<pre><code>对于一个二叉树来说，除了度为0的叶子节点和度为2的结点，剩下的就是度为1的结点，那么总结点n = n0
-+n1+n2。同时，对于每一个结点来说都是父结点分支表示的，假设数中分枝数为B，那么总结点数n 
-= B+1。而分枝数是可以通过n1和n2表示的，即 B=n1+2*n2。所以，n 用另外一种方式表示为 
-n=n1+2*n2+1。 两种方式得到的 n 值组成一个方程组，就可以得出 n0=n2+1。
-</code></pre>
-<h3 id="3-满二叉树">3、满二叉树</h3>
-<ul>
-<li>如果二叉树中除了叶子节点，每个结点的度都为2，则此二叉树称为满二叉树<br>
-<img src="https://guyang233.github.io/post-images/1578904931478.gif" alt="" loading="lazy"></li>
-<li>满二叉树除了满足普通二叉树的性质，又具备以下性质：
-<ul>
-<li>满二叉树中第i层的结点数为2的n-1次幂</li>
-<li>深度为K的满二叉树必有2的k次幂减1个结点，叶子数为2的k-1次幂</li>
-<li>满二叉树中不存在度为1额结点，每一个分支点中都有两颗深度相同的子树，且叶子节点都在最底层</li>
-<li>具有n个结点的满二叉树的深度为log2(n+1)。</li>
-</ul>
-</li>
-</ul>
-<h3 id="4-完全二叉树">4、完全二叉树</h3>
-<ul>
-<li>如果二叉树中除去最后一层节点为满二叉树，且最后一层的结点依次从左到右分布，则此二叉树被称为完全二叉树<br>
-<img src="https://guyang233.github.io/post-images/1578905309119.png" alt="" loading="lazy"></li>
-<li>完全二叉树除了具备普通二叉树的性质，自身也有一些独特的性质，比如说，n个结点的完全二叉树的深度为 ⌊log2n⌋+1</li>
-</ul>
-<pre><code>⌊log2n⌋ 表示取小于 log2n 的最大整数。例如，⌊log24⌋ = 2，而 ⌊log25⌋ 结果也是 2。
-</code></pre>
-<ul>
-<li>对于任意一个完全二叉树来说，如果将含有的结点按照层次从左到右分布，，对于任意一个结点i，完全二叉树还有以下几个结论成立
-<ul>
-<li>当 i&gt;1 时，父亲结点为结点 [i/2] 。（i=1 时，表示的是根结点，无父亲结点）</li>
-<li>如果 2<em>i&gt;n（总结点的个数） ，则结点 i 肯定没有左孩子（为叶子结点）；否则其左孩子是结点 2</em>i。</li>
-<li>如果 2<em>i+1&gt;n ，则结点 i 肯定没有右孩子；否则右孩子是结点 2</em>i+1 。</li>
-</ul>
-</li>
-</ul>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[数据结构-树存储结构]]></title>
-        <id>https://guyang233.github.io/post/shu-ju-jie-gou-shu-cun-chu-jie-gou</id>
-        <link href="https://guyang233.github.io/post/shu-ju-jie-gou-shu-cun-chu-jie-gou">
-        </link>
-        <updated>2020-01-13T07:12:41.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="1-简介">1、简介</h3>
-<ul>
-<li>一种非线性存储结构。存储的是具有一对多关系的数据元素集合<br>
-<img src="https://guyang233.github.io/post-images/1578899735338.png" alt="" loading="lazy"></li>
-</ul>
-<h3 id="2-树的结点">2、树的结点</h3>
-<ul>
-<li>结点：使用树结构存储的每一个元素都被称为“结点”。</li>
-<li>父结点（双亲结点）、子结点和兄弟结点：对于途中的A来说，A是B、C、D的父结点，也叫做双亲结点，B对于A来说就是子结点，B、C、D具有相同的父结点，所以他们之间为兄弟结点。</li>
-<li>树（简称根结点）：每一个非空树都有且只有一个被称为根的结点，图中A结点为根结点。</li>
-<li>叶子结点：如果结点没有任何的字结点，那么此结点被称为叶子结点（叶结点）</li>
-</ul>
-<h3 id="3-子树和空树">3、子树和空树</h3>
-<ul>
-<li>子树：上图来说，整棵树的根结点为A，如果单看B、E、F、K、L组成的部分来说，也是一棵树，而且结点B为这棵树的根结点。单个结点也是一棵树，只不过跟结点就是他本身，K、L都是树，而且整颗树都是子树。树也可以定义为根结点和若干颗子树构成的。</li>
-<li>空树：如果集合本省为空，那么构成的树就被称为空树。空树中没有结点。</li>
-<li>补充：在拥有同一个跟结点的子树之间不能相互有交集。否则破坏了树的结构。</li>
-</ul>
-<h3 id="4-结点的度和层次">4、结点的度和层次</h3>
-<ul>
-<li>对于一个结点，拥有的子树数（结点有多少分支）被称为结点的度（Degree），上图中A结点有三颗子树，所以A结点的度为3。一棵树的度是树内各结点的度的最大值，上图A结点的度的值最大，为3，所以整颗树的度就是3。</li>
-<li>结点的层次：从一颗树的树根开始，树根所在的层为第一层，根的孩子结点所在的层为第二层，以此类推，上图的层次最大为4层，一棵树的深度（高度）是树中结点所在的最大层次，为4。</li>
-<li>如果两个结点的父结点虽不相同，但是父结点处在同一层次上面，那么这两个结点就是堂兄弟的关系。</li>
-</ul>
-<h3 id="5-有序树和无序数">5、有序树和无序数</h3>
-<ul>
-<li>如果树中结点的子树从左看到右，谁在左边谁在右边是有规定的，那么这棵树成为有序树，反之则是无序树</li>
-<li>在有序树中，一个结点的最左边的子树称为第一个孩子，最右边的成为最后一个孩子</li>
-<li>上图：如果是一颗有序树，则结点B为根结点的子树为整棵树的第一个孩子，结点D为根结点的子树为最后一个孩子</li>
-</ul>
-<h3 id="6-森林">6、森林</h3>
-<ul>
-<li>由m（m&gt;=0）个互不相交的树组成的集合被称为森林，上图，B、C、D为根结点的三颗子树就可以被称为森林。</li>
-<li>数还可用一个式子表达Tree=（root，F），root表示树的根结点，F为森林。</li>
-</ul>
-<h3 id="7-树的表示方法">7、树的表示方法</h3>
-<figure data-type="image" tabindex="1"><img src="https://guyang233.github.io/post-images/1578901507284.png" alt="" loading="lazy"></figure>
-<ul>
-<li>左边是嵌套的集合形式，集合之间不能相交。</li>
-<li>右边是凹入表示法。最长条为根结点，相同长度的表示为在同一层次</li>
-<li>广义表：(A , ( B ( E ( K , L ) , F ) , C ( G ) , D ( H ( M ) , I , J ) ) )</li>
-</ul>
-<h3 id="8-总结">8、总结</h3>
-<ul>
-<li>树形存储结构类似于家族中的族谱，各个结点之间也同样可能具有父子、兄弟、表兄弟的关系</li>
 </ul>
 ]]></content>
     </entry>

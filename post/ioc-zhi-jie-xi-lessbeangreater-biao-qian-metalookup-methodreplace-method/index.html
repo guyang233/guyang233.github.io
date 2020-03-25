@@ -1,0 +1,458 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IoC 之解析 &lt;bean&gt; 标签：meta、lookup-method、replace-method | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1585155333795">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="IoC 之解析 &lt;bean&gt; 标签：meta、lookup-method、replace-method | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="
+解析Bean标签的基本属性之后，会依次调用BeanDefinitionParserDelegate的#parseMetaElements、#parseLookupOverrideSubElements、#parseReplacedMeth..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1585155333795" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              IoC 之解析 &lt;bean&gt; 标签：meta、lookup-method、replace-method
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-03-23
+              </span>
+              <span>
+                7 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <ul>
+<li>解析Bean标签的基本属性之后，会依次调用BeanDefinitionParserDelegate的#parseMetaElements、#parseLookupOverrideSubElements、#parseReplacedMethodSubElements三个方法，分别对meta、lookup-method、replace-method元素进行解析。三个元素的作用如下
+<ul>
+<li>meta：元数据</li>
+<li>lookup-method：Spring动态改变bean里方法的实现，方法执行返回的对象，使用Spring内原有的这类对象替换，通过改变方法返回值来动态改变方法、内部实现使用cglib方法，重新生成子类，重写配置的方法和返回对象，达到动态改变的效果</li>
+<li>replace-method：Spring动态改变Bean里方法的实现，需要改变的方法，使用Spring内原有其他类（需要继承接口org.springframework.beans.factory.support.MethodReplacer）的逻辑，替换这个方法。通过改变方法执行逻辑来实现动态的改变方法</li>
+</ul>
+</li>
+</ul>
+<h3 id="1mate子元素">1.Mate子元素</h3>
+<ul>
+<li>Meta：元数据。当需要使用里面的信息时可以通过key获取</li>
+<li>meta所声明的key并不会在Bean中提现，只是一个额外的声明，当我们需要使用里面的信息时，通过调用BeanDefinition的#getAttribute方法来获取。子元素的解析过程：</li>
+</ul>
+<pre><code>/**
+	 * Parse the meta elements underneath the given element, if any.
+	 */
+	public void parseMetaElements(Element ele, BeanMetadataAttributeAccessor attributeAccessor) {
+		NodeList nl = ele.getChildNodes();
+		//遍历子节点
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			//&lt;meta key=&quot;special-data&quot; value=&quot;sprecial stragey&quot; /&gt;
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, META_ELEMENT)) {
+				Element metaElement = (Element) node;
+				String key = metaElement.getAttribute(KEY_ATTRIBUTE);
+				String value = metaElement.getAttribute(VALUE_ATTRIBUTE);
+				BeanMetadataAttribute attribute = new BeanMetadataAttribute(key, value);
+				attribute.setSource(extractSource(metaElement));
+				attributeAccessor.addMetadataAttribute(attribute);
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>解析过程比较简单，获取响应的key-value构建BeanMetadataAttribute对象，然后attributeAccessor.addMetadataAttribute(attribute);</li>
+</ul>
+<pre><code>AbstractBeanDefinition 继承 BeanMetadataAttributeAccessor 类
+BeanMetadataAttributeAccessor 继承 AttributeAccessorSupport 类。
+</code></pre>
+<h4 id="11-addmetadataattribute">1.1 addMetadataAttribute</h4>
+<ul>
+<li>调用BeanMetadataAttributeAccessor#addMetadataAttribute方法将BeanMetadataAttribute设置到BeanMetadataAttributeAccessor中</li>
+</ul>
+<pre><code>	/**
+	 * Add the given BeanMetadataAttribute to this accessor's set of attributes.
+	 * @param attribute the BeanMetadataAttribute object to register
+	 */
+	public void addMetadataAttribute(BeanMetadataAttribute attribute) {
+		super.setAttribute(attribute.getName(), attribute);
+	}
+
+</code></pre>
+<ul>
+<li>委托给父类AttributeAccessorSupport实现</li>
+</ul>
+<pre><code>	@Override
+	public void setAttribute(String name, @Nullable Object value) {
+		Assert.notNull(name, &quot;Name must not be null&quot;);
+		if (value != null) {
+			this.attributes.put(name, value);
+		}
+		else {
+			removeAttribute(name);
+		}
+	}
+</code></pre>
+<ul>
+<li>AttributeAccessorSupport是AttributeAccessor的实现者，AttributeAccessor接口定义了与其他对象的元数据进行连接和访问的约定，可以通过该接口对属性进行获取、设置和删除的操作</li>
+</ul>
+<h4 id="12-getattribute">1.2 getAttribute</h4>
+<ul>
+<li>设置元数据之后，可以通过BeanDefinition的#getAttribute来获取属性</li>
+</ul>
+<pre><code>	/** Map with String keys and Object values. */
+	private final Map&lt;String, Object&gt; attributes = new LinkedHashMap&lt;&gt;();
+
+
+@Override
+	@Nullable
+	public Object getAttribute(String name) {
+		Assert.notNull(name, &quot;Name must not be null&quot;);
+		return this.attributes.get(name);
+	}
+</code></pre>
+<h3 id="2lookup-method子元素">2.lookup-method子元素</h3>
+<ul>
+<li>lookup-method：获取器注入，是把一个方法声明为某种类型的bean但是实际要返回的bean是在配置文件里面配置的。该方法可以设计一些可插拔的功能上，解除程序的依赖</li>
+</ul>
+<pre><code>public interface Car {
+
+    void display();
+
+}
+
+public class Bmw implements Car{
+
+    @Override
+    public void display() {
+        System.out.println(&quot;我是 BMW&quot;);
+    }
+
+}
+
+public class Hongqi implements Car{
+
+    @Override
+    public void display() {
+        System.out.println(&quot;我是 hongqi&quot;);
+    }
+
+}
+
+public abstract class Display {
+
+    public void display(){
+        getCar().display();
+    }
+    
+    public abstract Car getCar();
+
+}
+
+public static void main(String[] args) {
+    ApplicationContext context = new ClassPathXmlApplicationContext(&quot;classpath:spring.xml&quot;);
+    Display display = (Display) context.getBean(&quot;display&quot;);
+    display.display();
+}
+
+
+-- xml配置内容
+
+&lt;bean id=&quot;display&quot; class=&quot;org.springframework.core.test1.Display&quot;&gt;
+    &lt;lookup-method name=&quot;getCar&quot; bean=&quot;hongqi&quot;/&gt;
+&lt;/bean&gt;
+</code></pre>
+<ul>
+<li>运行结果为</li>
+</ul>
+<pre><code>我是 hongqi
+
+</code></pre>
+<ul>
+<li>如果将bean的内容替换为bmw，运行结果为</li>
+</ul>
+<pre><code>我是 BMW
+
+</code></pre>
+<h4 id="21-parselookupoverridesubelements">2.1 parseLookupOverrideSubElements</h4>
+<ul>
+<li>上面的示例已经初步了解了lookup-method子元素提供的功能呢，其解析通过#parseLookupOverrideSubElements方法</li>
+</ul>
+<pre><code>	/**
+	 * Parse lookup-override sub-elements of the given bean element.
+	 */
+	public void parseLookupOverrideSubElements(Element beanEle, MethodOverrides overrides) {
+		NodeList nl = beanEle.getChildNodes();
+		//遍历子节点
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, LOOKUP_METHOD_ELEMENT)) {
+				Element ele = (Element) node;
+				String methodName = ele.getAttribute(NAME_ATTRIBUTE);
+				String beanRef = ele.getAttribute(BEAN_ELEMENT);
+				LookupOverride override = new LookupOverride(methodName, beanRef);
+				//添加到MethodOverrides中
+				override.setSource(extractSource(ele));
+				overrides.addOverride(override);
+			}
+		}
+	}
+</code></pre>
+<ul>
+<li>解析过程和meta标签的过程差不多，同样是解析name、bean来构造一个LookupOverride对象，然后添加到MethodOverrides中</li>
+</ul>
+<h3 id="3replace-method子元素">3.replace-method子元素</h3>
+<ul>
+<li>replace-method：可以在运行时调用新的方法替换现有的方法，还能动态的更新原有方法的逻辑</li>
+</ul>
+<pre><code>public class Method {
+
+    public void display(){
+        System.out.println(&quot;我是原始方法&quot;);
+    }
+
+}
+
+public class MethodReplace implements MethodReplacer {
+
+    @Override
+    public Object reimplement(Object obj, Method method, Object[] args) throws Throwable {
+        System.out.println(&quot;我是替换方法&quot;);
+        return null;
+    }
+
+}
+
+public static void main(String[] args) {
+    ApplicationContext context = new ClassPathXmlApplicationContext(&quot;classpath:spring.xml&quot;);
+    Method method = (Method) context.getBean(&quot;method&quot;);
+    method.display();
+}
+
+-- xml文件
+&lt;bean id=&quot;methodReplace&quot; class=&quot;org.springframework.core.test1.MethodReplace&quot;/&gt;
+
+&lt;bean id=&quot;method&quot; class=&quot;org.springframework.core.test1.Method&quot;/&gt;
+</code></pre>
+<ul>
+<li>运行结果为</li>
+</ul>
+<pre><code>我是原始方法
+</code></pre>
+<ul>
+<li>增加replace-method子元素</li>
+</ul>
+<pre><code>&lt;bean id=&quot;methodReplace&quot; class=&quot;org.springframework.core.test1.MethodReplace&quot;/&gt;
+
+&lt;bean id=&quot;method&quot; class=&quot;org.springframework.core.test1.Method&quot;&gt;
+
+    &lt;replaced-method name=&quot;display&quot; replacer=&quot;methodReplace&quot;/&gt;
+
+&lt;/bean&gt;
+</code></pre>
+<ul>
+<li>运行结果为</li>
+</ul>
+<pre><code>我是替换方法
+
+</code></pre>
+<h4 id="31-parsereplacedmethodsubelements">3.1 parseReplacedMethodSubElements</h4>
+<ul>
+<li>上面的示例展示了replace-method标签的作用，是调用#parseReplacedMethodSubElements方法来解析replace-method标签的</li>
+</ul>
+<pre><code>	/**
+	 * Parse replaced-method sub-elements of the given bean element.
+	 */
+	public void parseReplacedMethodSubElements(Element beanEle, MethodOverrides overrides) {
+		NodeList nl = beanEle.getChildNodes();
+		//遍历子节点
+		for (int i = 0; i &lt; nl.getLength(); i++) {
+			Node node = nl.item(i);
+			if (isCandidateElement(node) &amp;&amp; nodeNameEquals(node, REPLACED_METHOD_ELEMENT)) {
+				Element replacedMethodEle = (Element) node;
+				String name = replacedMethodEle.getAttribute(NAME_ATTRIBUTE);
+				String callback = replacedMethodEle.getAttribute(REPLACER_ATTRIBUTE);
+				ReplaceOverride replaceOverride = new ReplaceOverride(name, callback);
+				// Look for arg-type match elements.
+				List&lt;Element&gt; argTypeEles = DomUtils.getChildElementsByTagName(replacedMethodEle, ARG_TYPE_ELEMENT);
+				for (Element argTypeEle : argTypeEles) {
+					String match = argTypeEle.getAttribute(ARG_TYPE_MATCH_ATTRIBUTE);
+					match = (StringUtils.hasText(match) ? match : DomUtils.getTextValue(argTypeEle));
+					if (StringUtils.hasText(match)) {
+						replaceOverride.addTypeIdentifier(match);
+					}
+				}
+				replaceOverride.setSource(extractSource(replacedMethodEle));
+				overrides.addOverride(replaceOverride);
+			}
+		}
+	}
+</code></pre>
+<h3 id="4总结">4.总结</h3>
+<ul>
+<li>主要是说明了lookup-method和replace-method两个子元素标签的作用以及解析</li>
+</ul>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1mate%E5%AD%90%E5%85%83%E7%B4%A0">1.Mate子元素</a>
+<ul>
+<li><a href="#11-addmetadataattribute">1.1 addMetadataAttribute</a></li>
+<li><a href="#12-getattribute">1.2 getAttribute</a></li>
+</ul>
+</li>
+<li><a href="#2lookup-method%E5%AD%90%E5%85%83%E7%B4%A0">2.lookup-method子元素</a>
+<ul>
+<li><a href="#21-parselookupoverridesubelements">2.1 parseLookupOverrideSubElements</a></li>
+</ul>
+</li>
+<li><a href="#3replace-method%E5%AD%90%E5%85%83%E7%B4%A0">3.replace-method子元素</a>
+<ul>
+<li><a href="#31-parsereplacedmethodsubelements">3.1 parseReplacedMethodSubElements</a></li>
+</ul>
+</li>
+<li><a href="#4%E6%80%BB%E7%BB%93">4.总结</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-beandefinition">
+              <h3 class="post-title">
+                IoC 之解析 &lt;bean&gt; 标签：BeanDefinition
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

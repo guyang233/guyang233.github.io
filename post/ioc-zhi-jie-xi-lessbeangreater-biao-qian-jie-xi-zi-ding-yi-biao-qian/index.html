@@ -1,0 +1,293 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IoC 之解析 &lt;bean&gt; 标签：解析自定义标签 | Gridea</title>
+<link rel="shortcut icon" href="https://guyang233.github.io/favicon.ico?v=1585155333795">
+<link href="https://cdn.remixicon.com/releases/v2.1.0/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://guyang233.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="IoC 之解析 &lt;bean&gt; 标签：解析自定义标签 | Gridea - Atom Feed" href="https://guyang233.github.io/atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="
+解析Bean标签的过程
+
+首先调用#parseBeanDefinitionElement方法来进行标签的解析
+如果解析成功（返回bdHolder != null），调用#decorateBeanDefinitionIfRequired方法..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://guyang233.github.io">
+  <img class="avatar" src="https://guyang233.github.io/images/avatar.png?v=1585155333795" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              IoC 之解析 &lt;bean&gt; 标签：解析自定义标签
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-03-25
+              </span>
+              <span>
+                4 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <ul>
+<li>解析Bean标签的过程
+<ul>
+<li>首先调用#parseBeanDefinitionElement方法来进行<bean>标签的解析</li>
+<li>如果解析成功（返回bdHolder != null），调用#decorateBeanDefinitionIfRequired方法，完成自定义标签元素的解析</li>
+</ul>
+</li>
+</ul>
+<h3 id="1-decoratebeandefinitionifrequired">1. decorateBeanDefinitionIfRequired</h3>
+<pre><code>/**
+	 * Decorate the given bean definition through a namespace handler, if applicable.
+	 * @param ele the current element
+	 * @param originalDef the current bean definition
+	 * @param containingBd the containing bean definition (if any)
+	 * @return the decorated bean definition
+	 */
+	public BeanDefinitionHolder decorateBeanDefinitionIfRequired(
+			Element ele, BeanDefinitionHolder originalDef, @Nullable BeanDefinition containingBd) {
+
+		BeanDefinitionHolder finalDefinition = originalDef;
+
+		//遍历属性，查看是否有适用于装饰的属性
+		// Decorate based on custom attributes first.
+		NamedNodeMap attributes = ele.getAttributes();
+		for (int i = 0; i &lt; attributes.getLength(); i++) {
+			Node node = attributes.item(i);
+			finalDefinition = decorateIfRequired(node, finalDefinition, containingBd);
+		}
+
+		//遍历子节点，查看是否有适用于修饰的子节点
+		// Decorate based on custom nested elements.
+		NodeList children = ele.getChildNodes();
+		for (int i = 0; i &lt; children.getLength(); i++) {
+			Node node = children.item(i);
+			if (node.getNodeType() == Node.ELEMENT_NODE) {
+				finalDefinition = decorateIfRequired(node, finalDefinition, containingBd);
+			}
+		}
+		return finalDefinition;
+	}
+</code></pre>
+<ul>
+<li>都是遍历，前者遍历的是属性（attributes），后者遍历的是子节点（childNodes）。最终调用的都是#decorateIfRequired方法，装饰对应的节点（Node）</li>
+</ul>
+<h3 id="2-decorateifrequired">2. decorateIfRequired</h3>
+<ul>
+<li>#decorateIfRequired方法，装饰对应的节点（node）</li>
+</ul>
+<pre><code>/**
+	 * Decorate the given bean definition through a namespace handler,
+	 * if applicable.
+	 * @param node the current child node
+	 * @param originalDef the current bean definition
+	 * @param containingBd the containing bean definition (if any)
+	 * @return the decorated bean definition
+	 */
+	public BeanDefinitionHolder decorateIfRequired(
+			Node node, BeanDefinitionHolder originalDef, @Nullable BeanDefinition containingBd) {
+
+		//获取自定义命名的空间
+		String namespaceUri = getNamespaceURI(node);
+		//过滤掉默认命名的标签
+		if (namespaceUri != null &amp;&amp; !isDefaultNamespace(namespaceUri)) {
+			//获取相应的处理器
+			NamespaceHandler handler = this.readerContext.getNamespaceHandlerResolver().resolve(namespaceUri);
+			if (handler != null) {
+				//进行装饰处理
+				BeanDefinitionHolder decorated =
+						handler.decorate(node, originalDef, new ParserContext(this.readerContext, this, containingBd));
+				if (decorated != null) {
+					return decorated;
+				}
+			}
+			else if (namespaceUri.startsWith(&quot;http://www.springframework.org/schema/&quot;)) {
+				error(&quot;Unable to locate Spring NamespaceHandler for XML schema namespace [&quot; + namespaceUri + &quot;]&quot;, node);
+			}
+			else {
+				// A custom namespace, not to be handled by Spring - maybe &quot;xml:...&quot;.
+				if (logger.isDebugEnabled()) {
+					logger.debug(&quot;No Spring NamespaceHandler found for XML schema namespace [&quot; + namespaceUri + &quot;]&quot;);
+				}
+			}
+		}
+		return originalDef;
+	}
+</code></pre>
+<ul>
+<li>首先获取自定义标签的命名空间</li>
+<li>如果不是默认的命名空间，根据该命名空间获取相应的处理器</li>
+<li>如果处理器存在，则进行装饰处理</li>
+</ul>
+<h3 id="3-小结">3. 小结</h3>
+<ul>
+<li>解析BeanDefinition的 入口在DefaultBeanDefinitionDocumentReader的#parseBeanDefinitions方法。该方法会根据命令空间来判断标签是默认标签还是自定义标签。其中
+<ul>
+<li>默认标签：由#parseDefaultElement方法来进行实现解析</li>
+<li>自定义标签：由BeanDefinitionParserDelegate的#parseCustomElement来实现解析</li>
+</ul>
+</li>
+<li>默认的标签中，会根据标签的名称的不同进行import、alias、bean、beans四大标签进行处理。其中bean标签的解析为核心，它由#processBeanDefinition方法来实现解析
+<ul>
+<li>processBeanDefinition方法，开始进入解析核心工作，分为三步
+<ul>
+<li>1、解析默认标签的默认标签，BeanDefinitionParserDelegate#parseBeanDefinitionElement方法，该方法会依次解析<bean>标签的属性、各个子元素，解析完成之后返回一个GenericBeanDefinition 实例对象</li>
+<li>2、解析默认标签下面的自定义标签BeanDefinitionParserDelegate#decorateBeanDefinitionIfRequired方法</li>
+<li>3、注册解析的BeanDefinition， #doRegisterBeanDefinitions方法</li>
+<li></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#1-decoratebeandefinitionifrequired">1. decorateBeanDefinitionIfRequired</a></li>
+<li><a href="#2-decorateifrequired">2. decorateIfRequired</a></li>
+<li><a href="#3-%E5%B0%8F%E7%BB%93">3. 小结</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://guyang233.github.io/post/ioc-zhi-jie-xi-lessbeangreater-biao-qian-constructor-argpropertyqualifier">
+              <h3 class="post-title">
+                IoC 之解析 &lt;bean&gt; 标签：constructor-arg、property、qualifier
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://guyang233.github.io/atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>
